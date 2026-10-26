@@ -1,0 +1,3086 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>AI Virus Chat Invasion</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout concept: a phone-shaped chat window on a dark desk. Landscape phones move the tab bar to the left edge.
+   The virus lives on two canvases (behind and above the thread), debris lives in a DOM layer between them. */
+:root{
+  --desk:#0c1117; --desk-2:#141c25;
+  --paper:#e8ecef; --card:#ffffff; --ink:#14202b; --muted:#66727f; --line:#d8dfe5;
+  --accent:#12957f; --accent-ink:#ffffff; --accent-soft:#dff3ef;
+  --virus:#e5243b; --virus-dark:#8f0e20; --warn:#f2a900; --good:#12957f;
+  --font-ui:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{
+  margin:0;background:var(--desk);color:var(--ink);font-family:var(--font-ui);
+  padding-block:8px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;justify-content:center;align-items:stretch;
+  background-image:radial-gradient(circle at 20% 10%,#1b2633 0,transparent 45%),radial-gradient(circle at 85% 90%,#2a1219 0,transparent 40%);
+}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+#app{
+  position:relative;width:100%;max-width:560px;height:100%;min-height:0;overflow:hidden;
+  border-radius:18px;background:var(--paper);font:15px/1.4 var(--font-ui);
+  touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+  box-shadow:0 0 0 1px #ffffff14,0 24px 60px #000a;
+}
+#bg{position:absolute;inset:0;z-index:0;background:
+  linear-gradient(#e8ecef,#e1e7ea);}
+#bg::before{content:"";position:absolute;inset:0;opacity:.5;background-image:radial-gradient(#c7d1d8 1px,transparent 1.2px);background-size:18px 18px}
+canvas.fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#cBack{z-index:1}
+#cFront{z-index:6}
+#shell{position:absolute;inset:0;z-index:2;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr);
+  grid-template-areas:"top" "hud" "views" "nav"}
+#debris{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden}
+.deb{position:absolute;left:0;top:0;will-change:transform;pointer-events:none;overflow:hidden}
+.deb.ltr{overflow:visible;display:flex;align-items:center;justify-content:center;white-space:pre;line-height:1}
+#toasts{position:absolute;z-index:7;left:12px;right:12px;top:64px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
+.toast{background:#14202bee;color:#fff;border-radius:14px;padding:8px 14px;font-size:13px;max-width:100%;box-shadow:0 6px 20px #0005;animation:tin .25s ease-out}
+.toast b{color:#9fe3d6;font-weight:600;margin-right:6px}
+@keyframes tin{from{transform:translateY(-10px);opacity:0}}
+
+/* top bar */
+#topbar{grid-area:top;display:flex;align-items:center;gap:10px;padding:8px 10px 8px 12px;background:var(--card);border-bottom:1px solid var(--line);min-height:56px}
+.av{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff;font-weight:700;font-size:16px;background:var(--accent);position:relative}
+.av::before{content:"";position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#2fd47a;border:2px solid #fff;display:none}
+.av.on-line::before{display:block}
+.tb-mid{flex:1;min-width:0;display:block}
+.tb-ttl{font-weight:700;font-size:16px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-btns{display:flex;gap:2px}
+.ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#43515f;flex:none}
+.ic svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ic:active{background:#0001}
+.ic.off{color:#b4bcc4}
+
+/* HUD */
+#hud{grid-area:hud;background:#14202b;color:#e9eef2;padding:6px 12px 7px;display:flex;flex-direction:column;gap:5px;font-size:12px}
+.hp{display:flex;align-items:center;gap:8px}
+.hp-l{font-weight:600;color:#ff8896;letter-spacing:.04em;font-size:11px;text-transform:uppercase;flex:none}
+.hp-bar{flex:1;height:9px;background:#ffffff1c;border-radius:6px;overflow:hidden;position:relative;min-width:0}
+.hp-bar i{position:absolute;inset:0 auto 0 0;width:100%;background:linear-gradient(90deg,#ff3b55,#ff8a5c);border-radius:6px;transition:width .12s linear}
+.hp b{font-family:var(--font-mono);font-weight:600;width:3.2ch;text-align:right;flex:none}
+.chips{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;color:#aebac4}
+.chips b{color:#fff;font-family:var(--font-mono);font-weight:600}
+.chip.st{background:#e5243b;color:#fff;padding:1px 8px;border-radius:9px;font-weight:600;font-size:11px}
+.chip.st.away{background:#f2a900;color:#241a00}
+.chip.lrn{margin-left:auto;font-family:var(--font-mono);letter-spacing:.06em;color:#9fe3d6}
+
+/* views */
+#views{grid-area:views;position:relative;min-height:0;min-width:0}
+.view{display:none;position:absolute;inset:0;flex-direction:column;min-height:0}
+.view.on{display:flex}
+.thread{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding:10px 12px;overflow:hidden}
+.bubble{max-width:80%;padding:8px 12px 6px;border-radius:16px;background:var(--card);box-shadow:0 1px 0 #cdd6dd;font-size:15px;line-height:1.4;position:relative;overflow-wrap:anywhere;word-break:break-word;flex:none}
+.bubble.me{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-bottom-right-radius:5px}
+.bubble.them{align-self:flex-start;border-bottom-left-radius:5px}
+.bubble .who{font-size:12px;font-weight:700;color:#c2511f;margin-bottom:1px}
+.bubble .ts{font-size:10.5px;opacity:.6;text-align:right;margin-top:1px;font-family:var(--font-mono)}
+.g{display:inline}
+.g.lo{visibility:hidden}
+.g.ea{display:none}
+.g.wob{display:inline-block;white-space:pre;animation:wob .09s linear infinite;color:var(--virus)}
+@keyframes wob{0%{transform:rotate(-16deg) translateY(-1px)}50%{transform:rotate(14deg) translateY(1px)}100%{transform:rotate(-16deg) translateY(-1px)}}
+.g.scr{color:var(--virus);font-family:var(--font-mono)}
+
+.composer{display:flex;align-items:center;gap:2px;padding:6px 8px;background:var(--card);border-top:1px solid var(--line);flex:none}
+.composer input{flex:1;min-width:0;height:40px;border-radius:20px;border:1px solid var(--line);background:#f3f6f8;padding:0 14px;font:inherit;font-size:15px;color:var(--ink);outline:none;-webkit-user-select:text;user-select:text}
+.composer input:focus{border-color:var(--accent);background:#fff}
+.send{width:42px;height:42px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;flex:none;margin-left:4px}
+.send svg{width:20px;height:20px;fill:#fff}
+.send:active{filter:brightness(.9)}
+
+/* chat list */
+.search{margin:10px 12px 4px;height:40px;border-radius:12px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;padding:0 12px;gap:8px;color:var(--muted);font-size:14px}
+.search svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.clist{display:flex;flex-direction:column;gap:2px;padding:6px 0;overflow:hidden;flex:1;min-height:0}
+.crow{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--card);cursor:pointer;margin:0 12px;border-radius:14px;margin-bottom:4px;flex:none}
+.crow:active{background:#f1f5f7}
+.cmid{flex:1;min-width:0}
+.nm{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:clip}
+.pv{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:clip}
+.cside{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.ctime{font-size:11px;color:var(--muted);font-family:var(--font-mono)}
+.cb{font-style:normal;background:var(--accent);color:#fff;border-radius:10px;min-width:20px;height:20px;padding:0 6px;font-size:11px;font-weight:700;display:grid;place-items:center}
+
+/* settings */
+.sets{padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden;flex:1;min-height:0}
+.panel{background:var(--card);border-radius:16px;padding:12px 14px;box-shadow:0 1px 0 #cdd6dd}
+.panel h3{margin:0 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.prow{display:flex;align-items:center;gap:10px;font-size:13px;margin:5px 0}
+.prow span{width:7.5em;flex:none;color:#33414e}
+.prow .bar{flex:1;height:7px;border-radius:4px;background:#e5eaee;overflow:hidden;min-width:0}
+.prow .bar i{display:block;height:100%;background:var(--virus);width:0;transition:width .3s}
+.heat{display:grid;grid-template-columns:repeat(8,1fr);gap:1px;width:96px;height:132px;flex:none;background:#e5eaee;border-radius:6px;overflow:hidden}
+.heat i{background:var(--virus);opacity:0}
+.prof-wrap{display:flex;gap:12px;align-items:flex-start}
+.prof-wrap .bars{flex:1;min-width:0}
+.hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.35}
+.setbtns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{min-height:44px;padding:0 16px;border-radius:12px;background:var(--ink);color:#fff;font-weight:600;font-size:14px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn.alt{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn.red{background:var(--virus)}
+.btn:active{filter:brightness(.88)}
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg .btn{min-height:40px;padding:0 12px;font-size:13px}
+.seg .btn.sel{background:var(--accent);color:#fff;box-shadow:none}
+
+/* nav */
+#nav{grid-area:nav;display:flex;background:var(--card);border-top:1px solid var(--line);padding:4px 6px calc(4px)}
+.navb{flex:1;min-width:0;height:54px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#6d7a87;font-size:11px;font-weight:500;position:relative}
+.navb svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.navb.on{color:var(--accent);background:var(--accent-soft)}
+.bdg{position:absolute;top:3px;right:calc(50% - 22px);min-width:17px;height:17px;border-radius:9px;background:var(--virus);color:#fff;font-style:normal;font-size:10px;font-weight:700;display:none;place-items:center;padding:0 4px}
+.bdg.show{display:grid}
+.vdot{position:absolute;top:6px;left:calc(50% + 6px);width:9px;height:9px;border-radius:50%;background:var(--virus);box-shadow:0 0 0 0 #e5243b99;display:none;animation:vp 1s infinite}
+.vdot.show{display:block}
+@keyframes vp{70%{box-shadow:0 0 0 8px #e5243b00}}
+
+/* damage + glitch */
+.dmg{--crack:0;position:relative}
+.dmg::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:var(--crack);border-radius:inherit;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='M52 0L45 22L58 40L47 61L60 81L51 100M45 22L18 31M58 40L86 35M47 61L22 74M60 81L84 88' fill='none' stroke='%2314202b' stroke-opacity='.6' stroke-width='2' vector-effect='non-scaling-stroke'/></svg>") center/100% 100% no-repeat}
+.eaten{visibility:hidden!important}
+.gl-jit{animation:jit .16s steps(2,end) 3}
+@keyframes jit{0%{transform:translate(0,0)}25%{transform:translate(-3px,1px) skewX(-3deg)}50%{transform:translate(3px,-1px)}75%{transform:translate(-1px,-2px) skewX(4deg)}100%{transform:none}}
+.gl-rgb{filter:drop-shadow(2px 0 rgba(255,0,60,.75)) drop-shadow(-2px 0 rgba(0,200,255,.75))}
+.gl-blink{animation:blk .4s steps(1,end) 2}
+@keyframes blk{50%{opacity:.12}}
+.sq{animation:sq .12s linear infinite}
+@keyframes sq{0%{transform:scale(1,1) rotate(-5deg)}50%{transform:scale(1.14,.82) rotate(6deg)}100%{transform:scale(1,1) rotate(-5deg)}}
+.regrow{animation:rg .7s steps(7,end)}
+@keyframes rg{0%{opacity:0;transform:scale(.6)}60%{opacity:.7;filter:hue-rotate(90deg)}100%{opacity:1;transform:none}}
+.hide-kids>*{visibility:hidden}
+.hud-gl #hpFill{background:repeating-linear-gradient(90deg,#fff 0 4px,#ff3b55 4px 9px)}
+
+/* overlays */
+.ov{position:absolute;inset:0;z-index:9;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(12,17,23,.76);touch-action:manipulation}
+.ov.show{display:flex}
+.card{width:100%;max-width:380px;background:#fff;border-radius:22px;padding:22px 20px 20px;box-shadow:0 20px 60px #000a;max-height:100%;overflow:auto}
+.card h1{margin:0 0 4px;font-size:26px;line-height:1.15;letter-spacing:-.01em}
+.card h1 em{font-style:normal;color:var(--virus)}
+.card p{margin:8px 0;color:#33414e;font-size:14.5px}
+.card ul{margin:8px 0 14px;padding-left:1.1em;color:#33414e;font-size:14px}
+.card li{margin:3px 0}
+.card .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.card .row .btn{flex:1 1 130px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 14px;margin:12px 0 4px;font-size:14px}
+.kv b{font-family:var(--font-mono)}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--virus);font-weight:600}
+
+/* landscape phone: tab bar on the left, tighter chrome */
+@media (max-height:520px) and (orientation:landscape){
+  body{padding-block:4px}
+  #app{max-width:820px;border-radius:12px}
+  #shell{grid-template-rows:auto auto minmax(0,1fr);grid-template-columns:64px minmax(0,1fr);grid-template-areas:"nav top" "nav hud" "nav views"}
+  #nav{flex-direction:column;border-top:0;border-right:1px solid var(--line);padding:4px;justify-content:center;gap:2px}
+  .navb{height:50px;flex:none}
+  #topbar{min-height:46px;padding-block:4px}
+  .av{width:32px;height:32px;font-size:14px}
+  .ic{width:36px;height:36px}
+  #hud{flex-direction:row;align-items:center;gap:12px;padding:4px 12px}
+  #hud .hp{flex:1}
+  .thread{padding:6px 12px;gap:5px}
+  .bubble{font-size:14px;padding:5px 11px 4px}
+  .composer{padding:3px 8px}
+  .composer input{height:34px}
+  .send{width:36px;height:36px}
+  .search{margin:6px 12px 2px;height:34px}
+  .crow{padding:6px 12px;margin-bottom:3px}
+  .sets{padding:8px 12px;gap:6px}
+  .panel{padding:8px 12px}
+  .heat{height:96px;width:70px}
+  .card{padding:14px 16px}
+  .card h1{font-size:21px}
+  .card ul{margin:4px 0 8px}
+  #toasts{top:52px}
+}
+@media (max-width:360px){
+  .tb-btns .ic{width:34px}
+  .chips{gap:3px 8px}
+}
+@media (prefers-reduced-motion:reduce){
+  .gl-jit,.gl-blink,.vdot{animation-duration:.01s}
+}
+
+/* ---- grab / pull / combat additions ---- */
+.chip.lv{background:#2a3a4a;color:#ffd9de;padding:1px 8px;border-radius:9px;font-weight:600;font-size:11px}
+.stepper{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
+.stepper span{flex:1;color:#33414e}
+.stepper .btn{min-height:40px;width:44px;padding:0;font-size:20px}
+.stepper b{font-family:var(--font-mono);min-width:6ch;text-align:center}
+.pull-a{outline:2px dashed #ffb70399;outline-offset:2px}
+.pull-b{outline:2.5px solid #ffb703;outline-offset:3px;box-shadow:0 0 0 6px #ffb70340,0 0 18px #ffb703aa}
+.deb.ui{overflow:hidden;filter:drop-shadow(0 5px 7px rgba(0,0,0,.35));z-index:3}
+.deb.ui.held{filter:drop-shadow(0 10px 12px rgba(0,0,0,.45)) drop-shadow(0 0 6px #ffb703)}
+.rip{position:absolute;pointer-events:none;border-radius:50%;width:var(--rs);height:var(--rs);left:calc(var(--rx) - var(--rs)/2);top:calc(var(--ry) - var(--rs)/2);
+  background:radial-gradient(circle,#ffffff00 52%,#ffffffaa 58%,#ffffff00 70%);mix-blend-mode:normal;animation:rip .5s cubic-bezier(.2,.7,.3,1) forwards;z-index:3}
+.rip.dk{background:radial-gradient(circle,#14202b00 52%,#14202b66 58%,#14202b00 70%)}
+@keyframes rip{from{transform:scale(.15);opacity:1}to{transform:scale(1);opacity:0}}
+#combo{position:absolute;z-index:8;left:0;right:0;top:118px;display:flex;flex-direction:column;align-items:center;pointer-events:none;opacity:0;transform:scale(.7);transition:opacity .18s,transform .25s cubic-bezier(.2,1.6,.4,1)}
+#combo.show{opacity:1;transform:scale(1)}
+#combo b{font:700 34px/1 var(--font-mono);color:#fff;-webkit-text-stroke:1.5px #8f0e20;text-shadow:0 3px 0 #8f0e20,0 0 18px #e5243b99;letter-spacing:.02em}
+#combo span{margin-top:3px;font:700 13px/1.2 var(--font-mono);letter-spacing:.14em;color:#ffe9a8;text-shadow:0 2px 0 #4a2a00;text-transform:uppercase;text-align:center;padding:0 12px}
+#evoBanner{position:absolute;z-index:8;left:12px;right:12px;top:30%;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;text-align:center;opacity:0;transform:scale(.8)}
+#evoBanner.show{animation:evb 2.3s ease-out forwards}
+@keyframes evb{0%{opacity:0;transform:scale(.6)}12%{opacity:1;transform:scale(1.08)}20%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(1.02) translateY(-10px)}}
+#evoBanner small{font:700 12px var(--font-mono);letter-spacing:.3em;color:#ffd24a}
+#evoBanner b{font:700 30px/1.1 var(--font-ui);color:#fff;text-shadow:0 3px 0 #8f0e20,0 0 22px #e5243bcc}
+#evoBanner span{font:600 13px var(--font-ui);color:#fff;background:#14202bdd;padding:5px 12px;border-radius:12px;max-width:100%}
+.flash{animation:flashw .35s ease-out}
+@keyframes flashw{0%{filter:brightness(1.8)}100%{filter:none}}
+</style>
+
+<div id="app" aria-label="Simulated chat app">
+  <div id="bg"></div>
+  <canvas id="cBack" class="fx"></canvas>
+  <div id="shell">
+    <header id="topbar" data-d="bar" data-ess="1" class="dmg">
+      <div class="av on-line" id="hAv" data-d="avatar">N</div>
+      <div class="tb-mid" data-d="label"><div class="tb-ttl" id="hTitle">Nimbus</div><div class="tb-sub" id="hSub">3 new chats</div></div>
+      <div class="tb-btns">
+        <button class="ic" id="bPause" data-d="icon" data-ess="1" data-nopull="1" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+        <button class="ic" id="bSound" data-d="icon" data-ess="1" aria-label="Sound"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg></button>
+        <button class="ic" id="bFx" data-d="icon" data-ess="1" aria-label="Effects quality"><svg viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg></button>
+      </div>
+    </header>
+    <section id="hud" data-d="hud" class="dmg">
+      <div class="hp"><span class="hp-l">Virus</span><div class="hp-bar"><i id="hpFill"></i></div><b id="hpNum">100</b></div>
+      <div class="chips">
+        <span class="chip st" id="stState">Idle</span>
+        <span class="chip lv" id="stLv">LV 1 Newborn</span>
+        <span>Score <b id="stScore">0</b></span>
+        <span>Eaten <b id="stEaten">0</b></span>
+        <span>Dodged <b id="stDodge">0</b></span>
+        <span class="chip lrn" id="stLrn" title="Virus memory">LRN ▯▯▯▯▯</span>
+      </div>
+    </section>
+    <main id="views">
+      <section class="view" id="v-list" data-tab="list">
+        <div class="search" data-d="input" data-ess="1"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><span>Search chats</span></div>
+        <div class="clist" id="clist"></div>
+      </section>
+      <section class="view" id="v-dm" data-tab="dm">
+        <div class="thread" id="th-dm"></div>
+        <div class="composer solid" data-d="bar" data-ess="1" id="cp-dm">
+          <button class="ic" data-d="icon" aria-label="Attach file"><svg viewBox="0 0 24 24"><path d="M20 12l-7.5 7.5a5 5 0 0 1-7-7L13 5a3.4 3.4 0 0 1 5 5l-7.5 7.5a1.7 1.7 0 0 1-2.4-2.4L15 8"/></svg></button>
+          <input id="in-dm" data-d="input" data-ess="1" placeholder="Type a message…" autocomplete="off" enterkeyhint="send">
+          <button class="ic" data-d="icon" aria-label="Emoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c1 1.4 2.2 2 3.5 2s2.5-.6 3.5-2M9 9.5h.01M15 9.5h.01"/></svg></button>
+          <button class="send" data-send="dm" data-d="button" data-ess="1" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M3 11.5L21 3l-6.5 18-3-7.5z"/></svg></button>
+        </div>
+      </section>
+      <section class="view" id="v-team" data-tab="team">
+        <div class="thread" id="th-team"></div>
+        <div class="composer solid" data-d="bar" data-ess="1" id="cp-team">
+          <button class="ic" data-d="icon" aria-label="Attach file"><svg viewBox="0 0 24 24"><path d="M20 12l-7.5 7.5a5 5 0 0 1-7-7L13 5a3.4 3.4 0 0 1 5 5l-7.5 7.5a1.7 1.7 0 0 1-2.4-2.4L15 8"/></svg></button>
+          <input id="in-team" data-d="input" data-ess="1" placeholder="Message the team…" autocomplete="off" enterkeyhint="send">
+          <button class="ic" data-d="icon" aria-label="Emoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c1 1.4 2.2 2 3.5 2s2.5-.6 3.5-2M9 9.5h.01M15 9.5h.01"/></svg></button>
+          <button class="send" data-send="team" data-d="button" data-ess="1" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M3 11.5L21 3l-6.5 18-3-7.5z"/></svg></button>
+        </div>
+      </section>
+      <section class="view" id="v-settings" data-tab="settings">
+        <div class="sets">
+          <div class="panel" data-d="panel" id="pnProfile">
+            <h3>Virus memory</h3>
+            <div class="prof-wrap">
+              <div class="bars">
+                <div class="prow"><span>Rapid taps</span><div class="bar"><i id="pbTap"></i></div></div>
+                <div class="prow"><span>Chasing</span><div class="bar"><i id="pbDrag"></i></div></div>
+                <div class="prow"><span>Accuracy</span><div class="bar"><i id="pbHit"></i></div></div>
+                <div class="prow"><span>Grabbing</span><div class="bar"><i id="pbGrab"></i></div></div>
+                <div class="prow"><span>Wall throws</span><div class="bar"><i id="pbThrow"></i></div></div>
+                <div class="prow"><span>UI weapons</span><div class="bar"><i id="pbWpn"></i></div></div>
+                <div class="prow"><span>Tab following</span><div class="bar"><i id="pbFol"></i></div></div>
+                <div class="hint" id="pbNote">No data yet. Tap, grab or chase the virus for a while.</div>
+              </div>
+              <div class="heat" id="heatMap" title="Where you tap most"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Controls</h3>
+            <div class="stepper"><span>Grab hold time</span><button class="btn alt" id="btHoldM" data-d="button" data-ess="1" aria-label="Shorter grab hold">−</button><b id="holdVal">300 ms</b><button class="btn alt" id="btHoldP" data-d="button" data-ess="1" aria-label="Longer grab hold">+</button></div>
+            <div class="stepper"><span>UI pull hold time</span><button class="btn alt" id="btPullM" data-d="button" data-ess="1" aria-label="Shorter pull hold">−</button><b id="pullVal">450 ms</b><button class="btn alt" id="btPullP" data-d="button" data-ess="1" aria-label="Longer pull hold">+</button></div>
+          </div>
+          <div class="panel">
+            <h3>Sound &amp; effects</h3>
+            <div class="seg" id="qSeg">
+              <button class="btn alt" data-q="auto" data-d="button" data-ess="1">Auto</button>
+              <button class="btn alt" data-q="2" data-d="button" data-ess="1">High</button>
+              <button class="btn alt" data-q="1" data-d="button" data-ess="1">Medium</button>
+              <button class="btn alt" data-q="0" data-d="button" data-ess="1">Low</button>
+            </div>
+            <div class="setbtns" style="margin-top:8px">
+              <button class="btn alt" id="btSound" data-d="button" data-ess="1">Sound: On</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Data &amp; game</h3>
+            <div class="setbtns">
+              <button class="btn alt" id="btForget" data-d="button" data-ess="1">Clear virus memory</button>
+              <button class="btn red" id="btRestart" data-d="button" data-ess="1">Restart game</button>
+            </div>
+            <div class="hint">Memory is stored on this device only. You can clear it any time.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <nav id="nav" class="solid" data-d="bar" data-ess="1" aria-label="Tabs">
+      <button class="navb" data-tab="list" data-d="button" data-ess="1"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Chats</span><i class="bdg" id="bd-list"></i><i class="vdot"></i></button>
+      <button class="navb on" data-tab="dm" data-d="button" data-ess="1"><svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c.6-3.6 3.4-5.6 7-5.6s6.4 2 7 5.6"/></svg><span>Maya</span><i class="bdg" id="bd-dm"></i><i class="vdot"></i></button>
+      <button class="navb" data-tab="team" data-d="button" data-ess="1"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3.5 19c.5-3 2.6-4.6 5.5-4.6s5 1.6 5.5 4.6M15.5 14.6c2.4-.2 4.4 1 5 3.6"/></svg><span>Team</span><i class="bdg" id="bd-team"></i><i class="vdot"></i></button>
+      <button class="navb" data-tab="settings" data-d="button" data-ess="1"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg><span>Settings</span><i class="bdg" id="bd-settings"></i><i class="vdot"></i></button>
+    </nav>
+  </div>
+  <div id="debris"></div>
+  <canvas id="cFront" class="fx"></canvas>
+  <div id="toasts"></div>
+  <div id="combo" aria-live="polite"><b id="cmN"></b><span id="cmL"></span></div>
+  <div id="evoBanner" aria-live="polite"><small>EVOLVED</small><b id="evT">LV 2</b><span id="evS"></span></div>
+
+  <div class="ov show" id="ovStart"><div class="card">
+    <div class="tag">Nimbus Messenger · Bug report #0001</div>
+    <h1>AI Virus<br><em>The Chat Invasion</em></h1>
+    <p>A red virus escaped into the chat app. It eats messages, buttons and profile photos, and it studies how you play. Every few minutes it evolves.</p>
+    <ul>
+      <li><b>Tap</b> it to hit. <b>Hold</b> on it to grab, <b>drag</b> to slam it into walls and UI, <b>flick</b> to throw.</li>
+      <li><b>Hold</b> on any button, bubble or icon, then drag to rip it out and swing it as a weapon.</li>
+      <li>It flees across tabs. Watch for the red dot on a tab button.</li>
+    </ul>
+    <div class="kv" id="startKv" hidden></div>
+    <div class="row"><button class="btn red" id="btStart">Start hunting</button></div>
+  </div></div>
+  <div class="ov" id="ovPause"><div class="card">
+    <div class="tag">Paused</div>
+    <h1>Take a breather</h1>
+    <p>The virus and the physics are frozen right here.</p>
+    <div class="row"><button class="btn red" id="btResume">Resume</button><button class="btn alt" id="btRestart2">Restart</button></div>
+  </div></div>
+  <div class="ov" id="ovWin"><div class="card">
+    <div class="tag">Virus shattered</div>
+    <h1>Virus eliminated</h1>
+    <p id="winNote">The app is back to normal, but the next virus will remember you.</p>
+    <div class="kv" id="winKv"></div>
+    <div class="row"><button class="btn red" id="btAgain">Play again</button></div>
+  </div></div>
+  <div class="ov" id="ovLose"><div class="card">
+    <div class="tag">App crashed</div>
+    <h1>The virus wins</h1>
+    <p>Most of the app's interface has been destroyed.</p>
+    <div class="kv" id="loseKv"></div>
+    <div class="row"><button class="btn red" id="btAgain2">Try again</button></div>
+  </div></div>
+</div>
+<script>
+'use strict';
+(function () {
+/* ================= helpers ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a = 1, b) => (b === undefined ? Math.random() * a : a + Math.random() * (b - a));
+const pick = (a) => a[(Math.random() * a.length) | 0];
+const TAU = Math.PI * 2;
+const hyp = Math.hypot;
+const damp = (cur, tgt, k, dt) => cur + (tgt - cur) * (1 - Math.exp(-k * dt));
+const el$ = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
+
+/* ================= quality levels (Performance Manager) ================= */
+const QL = [
+  { name: 'Low', bodies: 70, parts: 70, nodes: 14, dpr: 1, bands: 0, shake: 0.4, glow: 0 },
+  { name: 'Medium', bodies: 120, parts: 160, nodes: 18, dpr: 1.5, bands: 1, shake: 0.8, glow: 1 },
+  { name: 'High', bodies: 180, parts: 300, nodes: 22, dpr: 2, bands: 2, shake: 1, glow: 1 },
+];
+
+/* ================= single source of truth ================= */
+const G = {
+  phase: 'menu',      // menu | play | pause | win | lose
+  tab: 'dm',
+  clock: 0, play: 0, frame: 0,
+  shake: 0, chaos: 0, integ: 1,
+  stats: { eaten: 0, swallowed: 0, dodges: 0, hits: 0, taps: 0, misses: 0, migr: 0 },
+  sound: true, qAuto: true, qLevel: 2,
+  diff: 0.15, reduced: false,
+  lastHitT: -99, tapLog: [],
+  score: 0, hitStop: 0, hitStopAt: -9, holdMs: 300, pullMs: 450,
+  evo: { lvl: 1, ep: 0, lastUp: 0, chase: 0, escapes: 0 },
+};
+const SKEY = 'chatinvasion.settings.v1';
+function setLoad() {
+  try { const o = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (o) { if (+o.holdMs >= 200 && +o.holdMs <= 450) G.holdMs = +o.holdMs; if (+o.pullMs >= 300 && +o.pullMs <= 700) G.pullMs = +o.pullMs; if (typeof o.sound === 'boolean') G.sound = o.sound; } } catch (e) { /* ignore */ }
+}
+function setSave() { try { localStorage.setItem(SKEY, JSON.stringify({ holdMs: G.holdMs, pullMs: G.pullMs, sound: G.sound })); } catch (e) { /* ignore */ } }
+try { G.reduced = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { /* ignore */ }
+
+const A = { w: 360, h: 640, dpr: 1, left: 0, top: 0 };   // app frame in CSS px
+const appEl = $('#app');
+const toLocal = (cx, cy) => ({ x: cx - A.left, y: cy - A.top });
+
+const V = {
+  alive: true, hidden: false, tab: 'dm', x: 180, y: 300, vx: 0, vy: 0, ax: 0, ay: 0,
+  hp: 100, hpMax: 100, R: 28, sc: 1, energy: 0, grow: 0,
+  state: 'idle', stT: 0, thinkT: 0.5, prev: [],
+  target: null, tx: 0, ty: 0, spot: null,
+  dashT: 0, dashCd: 0, invul: 0,
+  alert: 0, reactT: 0, threat: 0, lastThreatT: -9,
+  hurt: 0, happy: 0, startle: 0, blinkT: 2, blink: 0, sleepy: 0,
+  look: { x: 0, y: 0 }, face: -1.57,
+  back: false, suck: 0, biteT: 0, bites: 0, biteMax: 3, mouth: 0, chew: 0,
+  grab: null, struggle: 0, grabCd: 0, gripP: 0,
+  lvl: 1, stun: 0, stunMax: 0, proj: 0, tilt: 0, rot: 0, rotV: 0, restT: 0, esc: 0, escCd: 0, exhaust: 0, brace: 0,
+  evoT: 0, thrownAt: -9, lastImpactT: -9, airCtl: 0, pulseCd: 6, baitCd: 0, noGrabUntil: 0, dmgScale: 1, squeeze: 0,
+  mig: null, migEntry: null, migAt: 0, offT: 0, emerge: 0, ambush: null,
+  feint: 0, taunt: 0, desperate: false, forceBite: 0,
+  dodge: null, dodgeLast: '', missStreak: 0, combo: 0, comboT: 0,
+  stretch: 0, stV: 0, stAng: 0, spin: 0, breath: 0, spawnT: 0, dying: 0, dead: false,
+  nodes: [], nubs: [],
+  exp: { brow: 0.45, lid: 0, wide: 0, mouth: 0, tongue: 0, x: 0 },
+};
+
+/* ================= learning profile (persisted on device) ================= */
+const PKEY = 'chatinvasion.profile.v1';
+const GX = 8, GY = 12;
+const newProfile = () => ({
+  v: 1, games: 0, samples: 0, tapGap: 1.0, tapSpd: 300, dragRatio: 0.12, hitRate: 0.3, followDelay: 3, followN: 0, tabSw: 0,
+  grabN: 0, holdN: 0, holdAvg: 0.3, throwN: 0, wallThrow: 0, slamN: 0, pullN: 0, maxLvl: 1,
+  grabSide: [0, 0, 0, 0], throwDirs: new Array(8).fill(0), pullKind: { button: 0, icon: 0, avatar: 0, bubble: 0, label: 0, panel: 0 },
+  strat: { tap: [0, 0], grab: [0, 0], throw: [0, 0], weapon: [0, 0], pull: [0, 0] },
+  esc: { twist: [0, 0], jerk: [0, 0], pull: [0, 0], flip: [0, 0], shrink: [0, 0] },
+  grabHeat: new Array(GX * GY).fill(0), slamHeat: new Array(GX * GY).fill(0), pullHeat: new Array(GX * GY).fill(0),
+  dodge: { dash: [0, 0], side: [0, 0], juke: [0, 0], hide: [0, 0], migrate: [0, 0] },
+  heat: new Array(GX * GY).fill(0), trap: new Array(GX * GY).fill(0), dirs: new Array(8).fill(0),
+});
+let P = newProfile();
+function profLoad() {
+  try {
+    const raw = localStorage.getItem(PKEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (o && o.v === 1 && Array.isArray(o.heat) && o.heat.length === GX * GY && o.dodge) {
+        const base = newProfile(); P = Object.assign(base, o);
+        ['grabHeat', 'slamHeat', 'pullHeat'].forEach((k) => { if (!Array.isArray(P[k]) || P[k].length !== GX * GY) P[k] = base[k]; });
+        ['grabSide', 'throwDirs'].forEach((k) => { if (!Array.isArray(P[k]) || P[k].length !== base[k].length) P[k] = base[k]; });
+        ['strat', 'esc', 'pullKind'].forEach((k) => { P[k] = Object.assign(base[k], P[k] && typeof P[k] === 'object' ? P[k] : {}); });
+        for (const k of ['heat', 'trap', 'grabHeat', 'slamHeat', 'pullHeat']) P[k] = P[k].map((v) => (+v || 0) * 0.55);       // forget part of the old map between sessions
+      }
+    }
+  } catch (e) { /* storage blocked: run without memory */ }
+}
+function profSave() { try { localStorage.setItem(PKEY, JSON.stringify(P)); } catch (e) { /* ignore */ } }
+function profClear() { P = newProfile(); try { localStorage.removeItem(PKEY); } catch (e) { /* ignore */ } }
+const cellOf = (x, y) => clamp((y / A.h * GY) | 0, 0, GY - 1) * GX + clamp((x / A.w * GX) | 0, 0, GX - 1);
+function heatAdd(arr, x, y, a) {
+  const i = cellOf(x, y); arr[i] += a;
+  const cx = i % GX, cy = (i / GX) | 0;
+  if (cx > 0) arr[i - 1] += a * 0.35; if (cx < GX - 1) arr[i + 1] += a * 0.35;
+  if (cy > 0) arr[i - GX] += a * 0.35; if (cy < GY - 1) arr[i + GX] += a * 0.35;
+}
+function heatAt(arr, x, y) {
+  let m = 3; for (let i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
+  return clamp(arr[cellOf(x, y)] / m, 0, 1);
+}
+const ema = (cur, v, k) => cur + (v - cur) * k;
+
+/* ================= timeline: one scheduler, no setTimeout/setInterval ================= */
+const TL = [];
+function later(sec, fn) { TL.push({ t: G.clock + sec, fn }); }
+function tickTL() {
+  for (let i = TL.length - 1; i >= 0; i--) {
+    const e = TL[i];
+    if (e && e.t <= G.clock) { TL.splice(i, 1); try { e.fn(); } catch (err) { console.error(err); } }
+  }
+}
+
+/* ================= audio ================= */
+const Snd = {
+  ctx: null, master: null, nb: null, last: {},
+  init() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain(); this.master.gain.value = 0.3; this.master.connect(this.ctx.destination);
+      const n = (this.ctx.sampleRate * 0.6) | 0;
+      const b = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+      const d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      this.nb = b;
+    } catch (e) { this.ctx = null; }
+  },
+  ok(k, gap) {
+    if (!G.sound || !this.ctx || this.ctx.state !== 'running') return false;
+    const now = this.ctx.currentTime;
+    if (this.last[k] && now - this.last[k] < gap) return false;
+    this.last[k] = now; return true;
+  },
+  tone(f0, f1, dur, type, vol, delay) {
+    const c = this.ctx, t = c.currentTime + (delay || 0);
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.03);
+  },
+  noise(dur, vol, freq, q, delay) {
+    const c = this.ctx, t = c.currentTime + (delay || 0);
+    const s = c.createBufferSource(); s.buffer = this.nb;
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
+    const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random() * 0.2); s.stop(t + dur + 0.03);
+  },
+  play(n, a) {
+    try {
+      switch (n) {
+        case 'bite': if (this.ok(n, 0.12)) { this.noise(0.09, 0.5, 1800 + rnd(900), 2); this.tone(260, 90, 0.1, 'square', 0.12); } break;
+        case 'hit': if (this.ok(n, 0.05)) { this.tone(340, 70, 0.16, 'sine', 0.5); this.noise(0.06, 0.25, 900, 1); } break;
+        case 'hurt': if (this.ok(n, 0.15)) { this.tone(520, 180, 0.22, 'sawtooth', 0.12); } break;
+        case 'tap': if (this.ok(n, 0.04)) this.tone(180, 120, 0.05, 'triangle', 0.12); break;
+        case 'swallow': if (this.ok(n, 0.05)) this.tone(300 + rnd(200), 800 + rnd(300), 0.09, 'sine', 0.18); break;
+        case 'shatter': if (this.ok(n, 0.1)) { this.noise(0.35, 0.55, 2400, 0.7); this.tone(900, 200, 0.2, 'square', 0.08); this.tone(1500, 400, 0.15, 'triangle', 0.08, 0.03); } break;
+        case 'dash': if (this.ok(n, 0.12)) this.noise(0.14, 0.18, 700, 1.2); break;
+        case 'whoosh': if (this.ok(n, 0.2)) { this.noise(0.5, 0.3, 500, 0.8); this.tone(200, 900, 0.45, 'sine', 0.15); } break;
+        case 'pop': if (this.ok(n, 0.2)) { this.tone(160, 700, 0.14, 'sine', 0.35); } break;
+        case 'taunt': if (this.ok(n, 0.6)) { [520, 620, 520, 700].forEach((f, i) => this.tone(f, f * 0.9, 0.07, 'square', 0.07, i * 0.08)); } break;
+        case 'glitch': if (this.ok(n, 0.25)) { this.noise(0.12, 0.3, 3000, 4); this.tone(90, 60, 0.12, 'square', 0.1); } break;
+        case 'win': [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.22, 'triangle', 0.25, i * 0.12)); break;
+        case 'lose': [330, 262, 196, 147].forEach((f, i) => this.tone(f, f * 0.95, 0.3, 'sawtooth', 0.14, i * 0.16)); break;
+        case 'grab': if (this.ok(n, 0.15)) { this.tone(140, 340, 0.12, 'sine', 0.35); this.noise(0.05, 0.2, 700, 1); } break;
+        case 'rip': if (this.ok(n, 0.15)) { this.noise(0.14, 0.4, 1300, 1.4); this.tone(320, 110, 0.14, 'sawtooth', 0.1); } break;
+        case 'ready': if (this.ok(n, 0.15)) { this.tone(520, 780, 0.07, 'square', 0.08); } break;
+        case 'throw': if (this.ok(n, 0.15)) { this.noise(0.26, 0.28, 900, 0.8); this.tone(240, 760, 0.2, 'sine', 0.12); } break;
+        case 'slam': if (this.ok(n, 0.08)) { const k = 0.4 + 0.6 * (a || 0.5); this.tone(120, 36, 0.12 + 0.2 * k, 'sine', 0.75 * k); this.noise(0.08 + 0.1 * k, 0.55 * k, 480, 0.8); if (k > 0.7) this.tone(900, 200, 0.12, 'square', 0.1); } break;
+        case 'stun': if (this.ok(n, 0.3)) { this.tone(720, 300, 0.3, 'triangle', 0.12); this.tone(960, 420, 0.3, 'triangle', 0.08, 0.1); } break;
+        case 'escape': if (this.ok(n, 0.3)) { this.noise(0.16, 0.3, 1600, 1.2); this.tone(500, 1100, 0.14, 'square', 0.08); } break;
+        case 'pulse': if (this.ok(n, 0.3)) { this.tone(70, 30, 0.5, 'sine', 0.8); this.noise(0.35, 0.4, 300, 0.6); } break;
+        case 'evolve': { const b = 300 * Math.pow(2, ((a || 1) - 1) / 12); [0, 4, 7, 12, 16].forEach((st, i) => this.tone(b * Math.pow(2, st / 12), b * Math.pow(2, st / 12) * 1.02, 0.28, i % 2 ? 'triangle' : 'square', 0.12, i * 0.09)); this.noise(0.5, 0.2, 1200, 0.7); break; }
+        case 'notify': if (this.ok(n, 0.4)) { this.tone(880, 880, 0.08, 'sine', 0.15); this.tone(1175, 1175, 0.12, 'sine', 0.15, 0.09); } break;
+        default: break;
+      }
+    } catch (e) { /* audio is best-effort */ }
+  },
+};
+
+/* ================= performance manager ================= */
+const Perf = {
+  avg: 16.7, slow: 0, fast: 0, q() { return QL[G.qLevel]; },
+  sample(dtMs) {
+    this.avg = this.avg * 0.94 + dtMs * 0.06;
+    if (!G.qAuto || G.phase !== 'play') { this.slow = 0; return; }
+    if (this.avg > 24) this.slow += dtMs / 1000; else this.slow = Math.max(0, this.slow - dtMs / 2000);
+    if (this.slow > 2.5 && G.qLevel > 0) { G.qLevel--; this.slow = 0; this.avg = 16.7; applyQuality(); }
+  },
+};
+function applyQuality() {
+  const q = QL[G.qLevel];
+  A.dpr = Math.min(window.devicePixelRatio || 1, q.dpr);
+  if (typeof sizeCanvases === 'function') sizeCanvases();
+  if (typeof Phys !== 'undefined') Phys.trimTo(q.bodies);
+  const b = $('#bFx'); if (b) b.title = 'Effects: ' + q.name;
+  if (typeof refreshSettingsUi === 'function') refreshSettingsUi();
+}
+
+/* ================= App UI System ================= */
+const KIND = {
+  button: { max: 4, w: 0.8 }, icon: { max: 3, w: 0.7 }, avatar: { max: 5, w: 0.8, shape: 'round' },
+  bubble: { max: 6, w: 0.95 }, input: { max: 6, w: 0.9 }, bar: { max: 9, w: 0.7 }, label: { max: 3, w: 0.6 },
+  panel: { max: 5, w: 0.5 }, hud: { max: 999, w: 0.2 }, text: { max: 1, w: 1.1 },
+};
+const TABS = ['list', 'dm', 'team', 'settings'];
+const TAB_NAME = { list: 'Chats', dm: 'Maya', team: 'Design Team', settings: 'Settings' };
+const HEAD = {
+  list: ['Nimbus', '3 new chats', 'N', '#12957f', true],
+  dm: ['Maya', 'Online', 'M', '#e0578a', true],
+  team: ['Design Team', '5 members · 3 online', 'D', '#7e57c2', true],
+  settings: ['Settings', 'Virus memory', '⚙', '#455a64', false],
+};
+const UI = { items: [], byEl: new Map(), nid: 0, unread: { list: 3, dm: 0, team: 0, settings: 0 }, typing: null };
+
+let SEG = null;
+try { if (window.Intl && Intl.Segmenter) SEG = new Intl.Segmenter('en-US', { granularity: 'grapheme' }); } catch (e) { SEG = null; }
+function graphemes(s) {
+  if (SEG) return Array.from(SEG.segment(s), (x) => x.segment);
+  const out = [];
+  for (const ch of Array.from(s)) {   // code points, never half a surrogate pair
+    if (out.length && /^[\p{M}\u200d\ufe0f]$/u.test(ch)) out[out.length - 1] += ch;
+    else out.push(ch);
+  }
+  return out;
+}
+function makeText(el, text) {
+  el.textContent = '';
+  const frag = document.createDocumentFragment(), chars = [];
+  for (const g of graphemes(text)) {
+    const sp = el$('span', 'g'); sp.textContent = g; frag.appendChild(sp);
+    chars.push({ ch: g, sp, st: 'ok', ws: /^\s+$/.test(g) });
+  }
+  el.appendChild(frag);
+  return { el, orig: text, chars, cs: null, counted: false };
+}
+const textLeft = (ti) => ti.chars.reduce((n, c) => n + (c.st === 'ok' || c.st === 'wob' ? 1 : 0), 0);
+const textLeftReal = (ti) => ti.chars.reduce((n, c) => n + ((c.st === 'ok' || c.st === 'wob') && !c.ws ? 1 : 0), 0);
+
+function addItem(el, kind, o) {
+  o = o || {};
+  const K = KIND[kind];
+  const it = {
+    id: ++UI.nid, el, kind, tab: (el.closest('.view') || { dataset: { tab: '*' } }).dataset.tab,
+    integ: K.max, max: K.max, w: K.w, ess: o.ess !== undefined ? o.ess : el.dataset.ess === '1',
+    shape: K.shape || 'rect', bites: [], dead: false, text: o.text || null, parent: null, kids: [],
+    rc: null, rcF: -1, regrowAt: 0, stage: 0,
+  };
+  if (kind !== 'text') el.classList.add('dmg');
+  UI.items.push(it); UI.byEl.set(el, it);
+  return it;
+}
+function dropItemsIn(root) {
+  UI.items = UI.items.filter((it) => {
+    if (root.contains(it.el)) { UI.byEl.delete(it.el); if (it.parent) it.parent.kids = it.parent.kids.filter((k) => k !== it); return false; }
+    return true;
+  });
+}
+function rectOf(it) {
+  if (it.rcF === G.frame && it.rc) return it.rc;
+  const r = it.el.getBoundingClientRect();
+  const o = { x: r.left - A.left, y: r.top - A.top, w: r.width, h: r.height };
+  o.cx = o.x + o.w / 2; o.cy = o.y + o.h / 2;
+  it.rc = o; it.rcF = G.frame; return o;
+}
+const itemShown = (it) => !it.dead && !(it.parent && it.parent.dead) && (it.tab === '*' || it.tab === G.tab);
+
+function registerStatic() {
+  $$('[data-d]').forEach((el) => { if (!UI.byEl.has(el)) addItem(el, el.dataset.d); });
+  UI.items.forEach((it) => {
+    if (it.kind === 'text') return;
+    const p = it.el.parentElement && it.el.parentElement.closest('[data-d="bar"]');
+    if (p && UI.byEl.has(p) && UI.byEl.get(p) !== it) { it.parent = UI.byEl.get(p); it.parent.kids.push(it); }
+  });
+}
+
+/* ---- content ---- */
+const THREAD_DM = [
+  ['them', '', 'Hey, you up? Want to grab lunch today? 🍜', '12:04 PM'],
+  ['me', '', 'Yes! Meet at the usual spot at 12:30', '12:05 PM'],
+  ['them', '', "Cool, I'll grab us a table ✨", '12:06 PM'],
+  ['them', '', 'This app is acting weird. Messages keep vanishing', '12:21 PM'],
+  ['me', '', 'Really? Let me check', '12:22 PM'],
+  ['them', '', 'Hello from Maya! It is 2026 and !?#$ numbers 0123456789', '12:23 PM'],
+];
+const THREAD_TEAM = [
+  ['them', 'Priya', 'Uploaded the v2 file, everyone!', '11:48 AM'],
+  ['them', 'Ken', 'Looks great! Just tweak the button color', '11:52 AM'],
+  ['me', '', "Got it, I'll send it before noon", '11:55 AM'],
+  ['them', 'Priya', 'Anyone else seeing weird bugs in the app? 🐞', '12:18 PM'],
+  ['them', 'Ken', 'Something red keeps running around', '12:20 PM'],
+];
+const ROWS = [
+  { tab: 'dm', nm: 'Maya', pv: 'Hello from Maya! It is 2026 and !?#$', t: '12:23 PM', b: 2, c: '#e0578a', i: 'M' },
+  { tab: 'team', nm: 'Design Team', pv: 'Something red keeps running around', t: '12:20 PM', b: 1, c: '#7e57c2', i: 'D' },
+  { tab: '', nm: 'Mom', pv: "Don't forget to eat lunch, sweetie", t: '11:02 AM', b: 0, c: '#f4845f', i: 'M' },
+  { tab: '', nm: 'Corner Coffee', pv: 'Your order is ready ☕', t: 'Yesterday', b: 0, c: '#8d6e63', i: 'C' },
+  { tab: '', nm: 'Ken', pv: 'Looks great! Send me the file too', t: 'Yesterday', b: 0, c: '#26a69a', i: 'K' },
+];
+const REPLIES = ['lol for real', 'Okay, got it', 'Be right there', 'Thanks ✨', 'This app really is weird', 'See? It ran that way!', "Don't let it eat all our messages"];
+const NOTIFS = [['Maya', 'Your message was delivered (1)'], ['System', 'Unusual activity detected in this thread'], ['Ken', 'Did anything just move?'], ['System', 'Destination file is not responding'], ['Priya', 'Who is tapping what?']];
+
+function timeStr() { const d = new Date(), h = d.getHours(); return (h % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + (h < 12 ? ' AM' : ' PM'); }
+
+function addBubble(tab, side, who, text, ts) {
+  const th = $('#th-' + tab);
+  const b = el$('div', 'bubble ' + (side === 'me' ? 'me' : 'them'));
+  if (who) { const w = el$('div', 'who'); w.textContent = who; b.appendChild(w); }
+  const tx = el$('div', 'tx'); b.appendChild(tx);
+  const t = el$('div', 'ts'); t.textContent = ts || timeStr(); b.appendChild(t);
+  b.classList.add('solid');
+  th.appendChild(b);
+  const ti = makeText(tx, text);
+  const bi = addItem(b, 'bubble');
+  const xi = addItem(tx, 'text', { text: ti }); xi.parent = bi; bi.kids.push(xi);
+  xi.tab = bi.tab = tab;
+  while (th.children.length > 9) { const old = th.firstElementChild; dropItemsIn(old); old.remove(); }
+  return bi;
+}
+function buildThreads() {
+  [['dm', THREAD_DM], ['team', THREAD_TEAM]].forEach(([tab, data]) => {
+    const th = $('#th-' + tab); dropItemsIn(th); th.innerHTML = '';
+    data.forEach((m) => addBubble(tab, m[0], m[1], m[2], m[3]));
+  });
+}
+function buildList() {
+  const cl = $('#clist'); dropItemsIn(cl); cl.innerHTML = '';
+  ROWS.forEach((r) => {
+    const row = el$('div', 'crow solid'); row.dataset.open = r.tab;
+    const av = el$('div', 'av'); av.textContent = r.i; av.style.background = r.c;
+    const mid = el$('div', 'cmid'); const nm = el$('div', 'nm'); const pv = el$('div', 'pv'); mid.append(nm, pv);
+    const side = el$('div', 'cside'); const tm = el$('div', 'ctime'); tm.textContent = r.t; side.appendChild(tm);
+    if (r.b) { const bd = el$('i', 'cb'); bd.textContent = r.b; side.appendChild(bd); }
+    row.append(av, mid, side); cl.appendChild(row);
+    const ri = addItem(row, 'panel', { ess: false }); ri.tab = 'list';
+    const link = (k) => { k.parent = ri; ri.kids.push(k); k.tab = 'list'; return k; };
+    link(addItem(av, 'avatar', { ess: false }));
+    const n = makeText(nm, r.nm), p = makeText(pv, r.pv);
+    link(addItem(nm, 'text', { text: n })); link(addItem(pv, 'text', { text: p }));
+    link(addItem(side, 'label', { ess: false }));
+    row.addEventListener('click', () => { if (G.phase === 'play') { if (r.tab) setTab(r.tab); else toast(r.nm, 'Sample chat: nothing here yet'); } });
+  });
+  $$('.view .tab-tag').forEach((e) => e.remove());
+}
+function restoreItem(it) {
+  it.dead = false; it.integ = it.max; it.bites = []; it.stage = 0; it.regrowAt = 0;
+  const e = it.el;
+  e.classList.remove('eaten', 'gl-jit', 'gl-rgb', 'gl-blink', 'sq', 'regrow', 'hide-kids', 'pull-a', 'pull-b');
+  it.pulled = false; it.body = null; it.spring = null;
+  e.style.clipPath = ''; e.style.transform = ''; e.style.removeProperty('--crack'); e.style.height = ''; e.style.margin = '';
+  e.style.opacity = ''; e.style.padding = ''; e.style.overflow = ''; e.style.transition = '';
+  if (it.text) { const ti = makeText(e, it.text.orig); it.text.chars = ti.chars; it.text.counted = false; it.text.cs = null; }
+}
+
+/* ---- tabs ---- */
+function setHeader(tab) {
+  const h = HEAD[tab];
+  $('#hTitle').textContent = h[0]; $('#hSub').textContent = h[1];
+  const av = $('#hAv'); av.textContent = h[2]; av.style.background = h[3]; av.classList.toggle('on-line', h[4]);
+}
+function setTab(tab) {
+  if (!TABS.includes(tab)) return;
+  const prev = G.tab; G.tab = tab;
+  $$('.view').forEach((v) => v.classList.toggle('on', v.dataset.tab === tab));
+  $$('.navb').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  setHeader(tab);
+  UI.unread[tab] = 0; refreshBadges();
+  if (prev !== tab) {
+    Phys.onTabChange();
+    AI.onTabShown(tab, prev);
+    if (tab === 'settings') renderProfile();
+  }
+  refreshStatics();
+}
+function refreshBadges() {
+  TABS.forEach((t) => { const b = $('#bd-' + t); const n = UI.unread[t]; b.textContent = n > 99 ? '99+' : n; b.classList.toggle('show', n > 0 && t !== G.tab); });
+}
+function refreshVirusDots() {
+  const navs = $$('.navb');
+  navs.forEach((b) => { const dot = $('.vdot', b); dot.classList.toggle('show', G.phase === 'play' && V.alive && V.tab === b.dataset.tab && V.tab !== G.tab); });
+}
+function toast(who, msg) {
+  const box = $('#toasts');
+  while (box.children.length >= 3) box.firstElementChild.remove();
+  const t = el$('div', 'toast'); t.innerHTML = '<b></b><span></span>';
+  t.firstChild.textContent = who; t.lastChild.textContent = msg; box.appendChild(t);
+  later(2.6, () => t.remove());
+  Snd.play('notify');
+}
+function sendMsg(tab) {
+  const inp = $('#in-' + tab); const v = (inp.value || '').trim();
+  if (!v) return;
+  addBubble(tab, 'me', '', v.slice(0, 160)); inp.value = '';
+  refreshStatics();
+  later(1.2 + rnd(1.2), () => {
+    if (G.tab === tab) $('#hSub').textContent = 'typing…';
+    later(1.0 + rnd(0.8), () => {
+      const who = tab === 'team' ? pick(['Ploy', 'Ken']) : '';
+      addBubble(tab, 'them', who, pick(REPLIES)); setHeader(G.tab);
+      if (G.tab !== tab) { UI.unread[tab]++; refreshBadges(); Snd.play('notify'); }
+      refreshStatics();
+    });
+  });
+}
+
+/* ---- statics for physics: remaining opaque UI becomes ledges ---- */
+function refreshStatics() {
+  const out = [];
+  $$('.solid').forEach((e) => {
+    if (e.classList.contains('eaten') || e.closest('#debris')) return;
+    const v = e.closest('.view'); if (v && !v.classList.contains('on')) return;
+    const r = e.getBoundingClientRect(); if (r.width < 4 || r.height < 4) return;
+    out.push({ id: UI_sid(e), el: e, x: r.left - A.left, y: r.top - A.top, w: r.width, h: r.height });
+  });
+  Phys.setStatics(out);
+}
+const SID = new WeakMap(); let sidN = 0;
+function UI_sid(e) { let i = SID.get(e); if (!i) { i = ++sidN; SID.set(e, i); } return i; }
+
+/* ---- HUD + settings readouts ---- */
+const STATE_TH = { idle: 'Idle', explore: 'Exploring', hunt: 'Hunting', evade: 'Evading', dodge: 'Predicting', flee: 'Fleeing', hide: 'Hiding', migrate: 'Migrating', attack: 'Eating', recover: 'Recovering', taunt: 'Taunting', desperate: 'Desperate', dead: 'Shattered', grabbed: 'Grabbed', stunned: 'Stunned', thrown: 'Airborne', evolve: 'Evolving' };
+let hudT = 0, hudGl = 0;
+function updateHud(dt, force) {
+  hudT -= dt; if (hudT > 0 && !force) return; hudT = 0.1;
+  const hp = Math.max(0, Math.round(V.hp));
+  const glitching = hudGl > G.clock;
+  $('#hpFill').style.width = (glitching ? clamp(V.hp + rnd(-40, 40), 0, 100) : V.hp) + '%';
+  $('#hpNum').textContent = glitching && Math.random() < 0.5 ? '??' : hp;
+  const st = $('#stState');
+  if (V.tab !== G.tab && V.alive) { st.textContent = 'On tab: ' + TAB_NAME[V.tab]; st.classList.add('away'); }
+  else { st.textContent = STATE_TH[V.dead ? 'dead' : V.state] || V.state; st.classList.remove('away'); }
+  $('#stEaten').textContent = G.stats.eaten; $('#stDodge').textContent = G.stats.dodges; $('#stScore').textContent = G.score;
+  $('#stLv').textContent = 'LV ' + V.lvl + ' ' + Evo.name(V.lvl);
+  const lv = Math.min(5, Math.floor(P.samples / 18));
+  $('#stLrn').textContent = 'LRN ' + '▮'.repeat(lv) + '▯'.repeat(5 - lv);
+  $('#hud').classList.toggle('hud-gl', glitching);
+  refreshVirusDots();
+}
+function renderProfile() {
+  const set = (id, v) => { $('#' + id).style.width = Math.round(clamp(v, 0, 1) * 100) + '%'; };
+  set('pbTap', clamp((1.1 - P.tapGap) / 0.9, 0, 1)); set('pbDrag', P.dragRatio * 1.6); set('pbHit', P.hitRate);
+  set('pbGrab', clamp(P.grabN / 12, 0, 1)); set('pbThrow', P.throwN > 2 ? P.wallThrow / P.throwN : 0); set('pbWpn', clamp(P.pullN / 10, 0, 1));
+  set('pbFol', clamp(1 - P.followDelay / 8, 0, 1) * (P.followN ? 1 : 0));
+  const hm = $('#heatMap');
+  if (!hm.children.length) for (let i = 0; i < GX * GY; i++) hm.appendChild(document.createElement('i'));
+  let m = 3; P.heat.forEach((v) => { if (v > m) m = v; });
+  for (let i = 0; i < GX * GY; i++) hm.children[i].style.opacity = clamp(P.heat[i] / m, 0, 1).toFixed(2);
+  const note = [];
+  if (P.samples < 8) note.push('No data yet. Tap, grab or chase the virus for a while.');
+  else {
+    if (P.tapGap < 0.5) note.push('It knows you tap fast, so it hides and ambushes.');
+    if (P.dragRatio > 0.35) note.push('You like chasing, so it fakes you out.');
+    if (P.grabN > 2) { const sd = P.grabSide.indexOf(Math.max.apply(null, P.grabSide)); note.push('You grab from the ' + ['left', 'right', 'top', 'bottom'][sd] + ', so it watches that side.'); }
+    if (P.throwN > 3 && P.wallThrow / P.throwN > 0.4) note.push('You throw it at walls, so it steers away from them.');
+    if (P.pullN > 2) note.push('You use UI as weapons, so it avoids where you rip things out.');
+    const best = Object.keys(P.dodge).map((k) => [k, (P.dodge[k][1] + 1) / (P.dodge[k][0] + 2)]).sort((a, b) => b[1] - a[1])[0];
+    note.push('Best dodge so far: ' + ({ dash: 'dash', side: 'sidestep', juke: 'fake-out', hide: 'hiding', migrate: 'tab jump' })[best[0]] + '.');
+  }
+  $('#pbNote').textContent = note.join(' ');
+}
+function refreshSettingsUi() {
+  $$('#qSeg .btn').forEach((b) => b.classList.toggle('sel', G.qAuto ? b.dataset.q === 'auto' : +b.dataset.q === G.qLevel && b.dataset.q !== 'auto'));
+  const s = $('#btSound'); if (s) s.textContent = 'Sound: ' + (G.sound ? 'On' : 'Off');
+  const bs = $('#bSound'); if (bs) bs.classList.toggle('off', !G.sound);
+  const hv = $('#holdVal'); if (hv) hv.textContent = G.holdMs + ' ms';
+  const pv = $('#pullVal'); if (pv) pv.textContent = G.pullMs + ' ms';
+}
+
+/* ================= Physics World ================= */
+/* Bodies are DOM pieces (shards, letters). Shapes: circle ('c') or box ('b'); boxes use the extents of their rotated rectangle.
+   Statics are the remaining opaque UI blocks (bubbles, composer, nav...), so debris lands on real layout. */
+const Phys = {
+  B: [], act: [], elPool: [], nid: 0, S: [], sig: 0, G: 1700, layer: $('#debris'),
+
+  setStatics(list) {
+    let s = list.length; list.forEach((r) => { s += r.y * 0.37 + r.h * 0.11 + r.x * 0.07 + r.w * 0.03; });
+    this.S = list;
+    if (Math.abs(s - this.sig) > 0.5) { this.sig = s; this.wakeAll(); }
+  },
+  hold(b, p) {
+    b.held = { p, ox: clamp(p.x - b.x, -b.ehw * 0.8, b.ehw * 0.8), oy: clamp(p.y - b.y, -b.ehh * 0.8, b.ehh * 0.8) };
+    b.asleep = false; b.st = 0; b.el.classList.add('held'); b.hot = G.clock + 99; b.byPlayer = true;
+  },
+  drop(b, vx, vy) {
+    if (!b.held) return; b.held = null; b.el.classList.remove('held');
+    b.vx = vx; b.vy = vy; b.va = clamp(vx * 0.004, -9, 9); b.hot = G.clock + 2.2; b.asleep = false; b.st = 0;
+  },
+  releaseAll() { for (const b of this.B) if (b.held) { b.held = null; b.el.classList.remove('held'); b.hot = 0; } },
+  pickUi(x, y) {
+    let best = null;
+    for (const b of this.B) {
+      if (b.type !== 'ui' || b.tab !== G.tab || b.dying || b.held) continue;
+      const c = Math.cos(-b.a), sn = Math.sin(-b.a), dx = x - b.x, dy = y - b.y;
+      const lx = dx * c - dy * sn, ly = dx * sn + dy * c, m = 10;     // generous: fingers are fat
+      const hit = b.shape === 'c' ? hyp(dx, dy) < b.r + m : Math.abs(lx) < b.hw + m && Math.abs(ly) < b.hh + m;
+      if (hit && (!best || b.born > best.born)) best = b;
+    }
+    return best;
+  },
+  wakeAll() { for (const b of this.B) if (b.asleep) { b.asleep = false; b.st = 0; } },
+  wakeNear(x, y, r) { for (const b of this.B) if (b.asleep && Math.abs(b.x - x) < r && Math.abs(b.y - y) < r) { b.asleep = false; b.st = 0; } },
+  count() { return this.B.length; },
+
+  spawn(o) {
+    const cap = QL[G.qLevel].bodies;
+    while (this.B.length >= cap) this.evictOne();
+    const el = this.elPool.pop() || el$('div', 'deb');
+    el.className = 'deb' + (o.type === 'ltr' ? ' ltr' : '') + (o.type === 'ui' ? ' ui' : ''); el.style.cssText = ''; el.textContent = '';
+    const circle = o.shape === 'c';
+    const dw = o.dw || (circle ? o.r * 2 : o.hw * 2), dh = o.dh || (circle ? o.r * 2 : o.hh * 2);
+    el.style.width = dw + 'px'; el.style.height = dh + 'px';
+    if (circle) el.style.borderRadius = '50%';
+    if (o.build) o.build(el);
+    const b = {
+      x: o.x, y: o.y, vx: o.vx || 0, vy: o.vy || 0, a: o.a || 0, va: o.va || 0,
+      shape: circle ? 'c' : 'b', r: o.r || 0, hw: o.hw || 0, hh: o.hh || 0, ehw: 0, ehh: 0, dw, dh,
+      im: o.type === 'ui' ? 1 / (o.mass || 1) : 1 / (1 + (circle ? o.r * o.r * 0.012 : o.hw * o.hh * 0.02)), mass: o.mass || 0.4, held: null, hot: 0, id: ++this.nid, el, tab: o.tab || G.tab, type: o.type || 'shard',
+      ref: o.ref || null, asleep: false, st: 0, touch: false, ign: null, dying: 0, dyMax: 0.18, sc: 1, born: G.clock,
+    };
+    this.ext(b);
+    b.ign = [];
+    for (const s of this.S) if (this.overlapRect(b, s, 1)) b.ign.push(s.id);   // spawned inside a block: ghost until clear
+    el.style.display = b.tab === G.tab ? '' : 'none';
+    this.layer.appendChild(el);
+    this.B.push(b); this.draw(b);
+    return b;
+  },
+  evictOne() {
+    let k = -1;
+    for (let i = 0; i < this.B.length; i++) { const b = this.B[i]; if (b.asleep && b.type !== 'ltr' && b.type !== 'ui' && !b.dying) { k = i; break; } }
+    if (k < 0) for (let i = 0; i < this.B.length; i++) { const b = this.B[i]; if (b.asleep && !b.dying && !b.held) { k = i; break; } }
+    if (k < 0) { k = this.B.findIndex((b) => !b.held && b.type !== 'ui'); if (k < 0) k = this.B.findIndex((b) => !b.held); if (k < 0) k = 0; }
+    this.kill(this.B[k]);
+  },
+  kill(b) {
+    if (b.held) { b.held = null; }
+    if (b.type === 'ui' && b.ref && b.ref.it && b.ref.it.body === b) b.ref.it.body = null;
+    const i = this.B.indexOf(b); if (i >= 0) this.B.splice(i, 1);
+    if (b.el.parentNode) b.el.parentNode.removeChild(b.el);
+    b.el.textContent = ''; b.el.classList.remove('held'); if (this.elPool.length < 260) this.elPool.push(b.el);
+    if (b.type === 'ltr' && b.ref && b.ref.ch && b.ref.ch.st === 'loose') b.ref.ch.body = null;
+    b.dead = true;
+  },
+  trimTo(n) { while (this.B.length > n) this.evictOne(); },
+  clear() { while (this.B.length) this.kill(this.B[this.B.length - 1]); this.S = []; this.sig = 0; },
+  swallow(b) { if (b.dying) return; b.dying = b.dyMax; b.asleep = false; this.wakeNear(b.x, b.y, 46); },
+  onTabChange() { this.releaseAll(); for (const b of this.B) { b.el.style.display = b.tab === G.tab ? '' : 'none'; b.asleep = false; b.st = 0; } },
+  rescale(sx, sy) { for (const b of this.B) { b.x *= sx; b.y *= sy; b.asleep = false; b.st = 0; this.draw(b); } },
+
+  ext(b) {
+    if (b.shape === 'c') { b.ehw = b.ehh = b.r; return; }
+    const c = Math.abs(Math.cos(b.a)), s = Math.abs(Math.sin(b.a));
+    b.ehw = c * b.hw + s * b.hh; b.ehh = s * b.hw + c * b.hh;
+  },
+  overlapRect(b, s, m) {
+    if (b.shape === 'c') {
+      const cx = clamp(b.x, s.x, s.x + s.w), cy = clamp(b.y, s.y, s.y + s.h);
+      return (b.x - cx) ** 2 + (b.y - cy) ** 2 < (b.r + m) ** 2;
+    }
+    return b.x + b.ehw + m > s.x && b.x - b.ehw - m < s.x + s.w && b.y + b.ehh + m > s.y && b.y - b.ehh - m < s.y + s.h;
+  },
+
+  step(dt) {
+    const W = A.w, H = A.h, g = this.G * clamp(H / 700, 0.8, 1.3), act = this.act;
+    act.length = 0;
+    for (const b of this.B) if (b.tab === G.tab) act.push(b);
+    for (const b of act) {
+      if (b.dying) {
+        b.dying -= dt; b.sc = Math.max(0, b.dying / b.dyMax);
+        b.x += (V.x - b.x) * Math.min(1, 12 * dt); b.y += (V.y - b.y) * Math.min(1, 12 * dt); b.a += 9 * dt;
+        if (b.dying <= 0) this.kill(b); else this.draw(b);
+        continue;
+      }
+      b.wasTouch = b.touch; b.touch = false;
+      if (b.held) {                                  // spring joint to the finger: follows, but with weight and lag
+        b.asleep = false; b.st = 0;
+        const pt = b.held.p, tx = pt.x - b.held.ox, ty = pt.y - b.held.oy;
+        b.vx += ((tx - b.x) * 430 - b.vx * 27) * dt; b.vy += ((ty - b.y) * 430 - b.vy * 27) * dt;
+        b.va += ((clamp(b.vx * 0.0021, -0.75, 0.75) - b.a) * 55 - b.va * 9) * dt;
+        const hs = hyp(b.vx, b.vy); if (hs > 1700) { b.vx *= 1700 / hs; b.vy *= 1700 / hs; }
+        b.x += b.vx * dt; b.y += b.vy * dt; b.a += b.va * dt;
+        this.ext(b); this.world(b, W, H); this.statics(b);
+        continue;
+      }
+      if (b.asleep) continue;
+      if (b.wasTouch) b.va *= Math.exp(-8 * dt);
+      b.vy += g * dt;
+      b.vx *= 1 - 0.12 * dt; b.vy *= 1 - 0.04 * dt; b.va *= 1 - 0.45 * dt;
+      const sp = hyp(b.vx, b.vy); if (sp > 1500) { b.vx *= 1500 / sp; b.vy *= 1500 / sp; }
+      b.x += b.vx * dt; b.y += b.vy * dt; b.a += b.va * dt;
+      this.ext(b);
+      this.world(b, W, H);
+      this.statics(b);
+    }
+    for (let i = 0; i < act.length; i++) {
+      const a = act[i]; if (a.dying) continue;
+      for (let j = i + 1; j < act.length; j++) { const c = act[j]; if (!c.dying) this.pair(a, c); }
+    }
+    for (const b of act) {
+      if (b.dying) continue;
+      if (b.held) { this.draw(b); continue; }
+      if (b.asleep) continue;
+      const sp = hyp(b.vx, b.vy);
+      if (b.touch && sp < g * dt * 1.7 + 6 && Math.abs(b.va) < 0.7) { b.st += dt; if (b.st > 0.5) { b.asleep = true; b.vx = b.vy = b.va = 0; } } else b.st = 0;
+      if (b.y > H + 300 || b.x < -300 || b.x > W + 300) { this.kill(b); continue; }   // anything that escapes is discarded safely
+      this.draw(b);
+    }
+  },
+  world(b, W, H) {
+    if (b.x - b.ehw < 0) { b.x = b.ehw; if (b.vx < 0) b.vx = -b.vx * 0.4; b.touch = true; }
+    else if (b.x + b.ehw > W) { b.x = W - b.ehw; if (b.vx > 0) b.vx = -b.vx * 0.4; b.touch = true; }
+    if (b.y + b.ehh > H) {
+      b.y = H - b.ehh;
+      if (b.vy > 0) { b.vy = b.vy > 110 ? -b.vy * 0.3 : 0; b.vx *= 0.82; b.va *= 0.7; }
+      b.touch = true;
+    }
+  },
+  statics(b) {
+    for (const s of this.S) {
+      if (b.ign.length) {
+        const k = b.ign.indexOf(s.id);
+        if (k >= 0) { if (this.overlapRect(b, s, 2)) continue; b.ign.splice(k, 1); }
+      }
+      let nx, ny, pen;
+      if (b.shape === 'c') {
+        const cx = clamp(b.x, s.x, s.x + s.w), cy = clamp(b.y, s.y, s.y + s.h);
+        const ex = b.x - cx, ey = b.y - cy, d2 = ex * ex + ey * ey;
+        if (d2 >= b.r * b.r) continue;
+        if (d2 > 1e-6) { const d = Math.sqrt(d2); nx = ex / d; ny = ey / d; pen = b.r - d; } else { nx = 0; ny = -1; pen = b.r; }
+      } else {
+        const ox = Math.min(b.x + b.ehw, s.x + s.w) - Math.max(b.x - b.ehw, s.x);
+        const oy = Math.min(b.y + b.ehh, s.y + s.h) - Math.max(b.y - b.ehh, s.y);
+        if (ox <= 0 || oy <= 0) continue;
+        if (ox < oy) { nx = b.x < s.x + s.w / 2 ? -1 : 1; ny = 0; pen = ox; } else { nx = 0; ny = b.y < s.y + s.h / 2 ? -1 : 1; pen = oy; }
+      }
+      b.x += nx * pen; b.y += ny * pen;
+      const vn = b.vx * nx + b.vy * ny;
+      if (vn < 0) {
+        const e = -vn > 120 ? 0.28 : 0;
+        b.vx -= (1 + e) * vn * nx; b.vy -= (1 + e) * vn * ny;
+        const tx = -ny, ty = nx, vt = b.vx * tx + b.vy * ty;
+        b.vx -= tx * vt * 0.12; b.vy -= ty * vt * 0.12; b.va = b.va * 0.8 + vt * 0.002 * (nx + ny > 0 ? 1 : -1);
+        if (-vn > 160) Snd.play('tap');
+      }
+      b.touch = true;
+    }
+  },
+  pair(a, b) {
+    if (a.asleep && b.asleep) return;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    if (a.asleep) this.ext(a); if (b.asleep) this.ext(b);
+    if (Math.abs(dx) > a.ehw + b.ehw || Math.abs(dy) > a.ehh + b.ehh) return;
+    let nx, ny, pen;
+    if (a.shape === 'c' && b.shape === 'c') {
+      const d = hyp(dx, dy), rr = a.r + b.r; if (d >= rr) return;
+      nx = d > 1e-4 ? dx / d : 0; ny = d > 1e-4 ? dy / d : -1; pen = rr - d;
+    } else if (a.shape === 'c' || b.shape === 'c') {
+      const c = a.shape === 'c' ? a : b, k = c === a ? b : a;
+      const cx = clamp(c.x, k.x - k.ehw, k.x + k.ehw), cy = clamp(c.y, k.y - k.ehh, k.y + k.ehh);
+      const ex = c.x - cx, ey = c.y - cy, d2 = ex * ex + ey * ey; if (d2 >= c.r * c.r) return;
+      let mx = 0, my = -1; pen = c.r;
+      if (d2 > 1e-6) { const d = Math.sqrt(d2); mx = ex / d; my = ey / d; pen = c.r - d; }
+      if (c === b) { nx = mx; ny = my; } else { nx = -mx; ny = -my; }
+    } else {
+      const ox = a.ehw + b.ehw - Math.abs(dx), oy = a.ehh + b.ehh - Math.abs(dy);
+      if (ox <= 0 || oy <= 0) return;
+      if (ox < oy) { nx = dx < 0 ? -1 : 1; ny = 0; pen = ox; } else { nx = 0; ny = dy < 0 ? -1 : 1; pen = oy; }
+    }
+    // wake a sleeper only when hit by something moving
+    if (a.asleep && hyp(b.vx, b.vy) > 45) { a.asleep = false; a.st = 0; }
+    if (b.asleep && hyp(a.vx, a.vy) > 45) { b.asleep = false; b.st = 0; }
+    const ima = a.asleep ? 0 : a.im, imb = b.asleep ? 0 : b.im, sum = ima + imb;
+    if (sum === 0) return;
+    a.x -= nx * pen * ima / sum; a.y -= ny * pen * ima / sum; b.x += nx * pen * imb / sum; b.y += ny * pen * imb / sum;
+    const rvx = b.vx - a.vx, rvy = b.vy - a.vy, vn = rvx * nx + rvy * ny;
+    if (vn < 0) {
+      const e = -vn > 100 ? 0.3 : 0, j = -(1 + e) * vn / sum;
+      a.vx -= j * ima * nx; a.vy -= j * ima * ny; b.vx += j * imb * nx; b.vy += j * imb * ny;
+      const tx = -ny, ty = nx, vt = rvx * tx + rvy * ty, jt = -vt * 0.25 / sum;
+      a.vx -= jt * ima * tx; a.vy -= jt * ima * ty; b.vx += jt * imb * tx; b.vy += jt * imb * ty;
+      a.va -= vt * 0.01 * ima; b.va += vt * 0.01 * imb;
+    }
+    a.touch = b.touch = true;
+  },
+  draw(b) {
+    b.el.style.transform = 'translate3d(' + (b.x - b.dw / 2).toFixed(1) + 'px,' + (b.y - b.dh / 2).toFixed(1) + 'px,0) rotate(' + b.a.toFixed(3) + 'rad)' + (b.sc !== 1 ? ' scale(' + b.sc.toFixed(2) + ')' : '');
+    if (b.dying) b.el.style.opacity = b.sc.toFixed(2);
+  },
+
+  /* ---- forces from the virus ---- */
+  suck(mx, my, rad, str, dt, swR, onEat) {
+    for (const b of this.B) {
+      if (b.type !== 'ltr' || b.tab !== G.tab || b.dying) continue;
+      const dx = mx - b.x, dy = my - b.y, d = hyp(dx, dy);
+      if (d > rad) continue;
+      if (d < swR) { onEat(b); continue; }
+      b.asleep = false; b.st = 0;
+      const f = str * Math.pow(1 - d / rad, 1.1);
+      b.vx += dx / d * f * dt; b.vy += dy / d * f * dt - this.G * 0.6 * dt; b.va += (dx < 0 ? -1 : 1) * 7 * dt;
+    }
+  },
+  looseNear(x, y, rad) { let n = 0; for (const b of this.B) if (b.type === 'ltr' && b.tab === G.tab && !b.dying && Math.abs(b.x - x) < rad && Math.abs(b.y - y) < rad) n++; return n; },
+  nearestLetter(x, y, rad) {
+    let best = null, bd = rad;
+    for (const b of this.B) if (b.type === 'ltr' && b.tab === G.tab && !b.dying) { const d = hyp(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } }
+    return best;
+  },
+  flick(x, y, rad, dx, dy, spd) {
+    let n = 0;
+    for (const b of this.B) {
+      if (b.tab !== G.tab || b.dying) continue;
+      if (hyp(b.x - x, b.y - y) < rad) { b.asleep = false; b.st = 0; b.vx += dx * spd * (0.7 + Math.random() * 0.6); b.vy += dy * spd * (0.7 + Math.random() * 0.6) - 120; b.va += (Math.random() - 0.5) * 12; n++; }
+    }
+    return n;
+  },
+  pushFromCircles(cs) {
+    for (const b of this.B) {
+      if (b.tab !== G.tab || b.dying || b.type === 'ui') continue;
+      if (b.asleep) this.ext(b);
+      for (const c of cs) {
+        let nx, ny, pen;
+        if (b.shape === 'c') {
+          const d = hyp(b.x - c.x, b.y - c.y), rr = b.r + c.r; if (d >= rr) continue;
+          nx = d > 1e-4 ? (b.x - c.x) / d : 0; ny = d > 1e-4 ? (b.y - c.y) / d : -1; pen = rr - d;
+        } else {
+          const cx = clamp(c.x, b.x - b.ehw, b.x + b.ehw), cy = clamp(c.y, b.y - b.ehh, b.y + b.ehh);
+          const ex = c.x - cx, ey = c.y - cy, d2 = ex * ex + ey * ey; if (d2 >= c.r * c.r) continue;
+          if (d2 > 1e-6) { const d = Math.sqrt(d2); nx = -ex / d; ny = -ey / d; pen = c.r - d; } else { nx = b.x < c.x ? -1 : 1; ny = 0; pen = c.r; }
+        }
+        b.x += nx * pen; b.y += ny * pen; b.asleep = false; b.st = 0;
+        const sp = hyp(c.vx, c.vy);
+        b.vx += nx * (50 + sp * 0.5) + c.vx * 0.35; b.vy += ny * (50 + sp * 0.5) + c.vy * 0.35; b.va += (Math.random() - 0.5) * 6;
+      }
+    }
+  },
+};
+
+/* ================= UI Destruction System + Text Fragmentation ================= */
+const KCOL = { button: '#12957f', icon: '#43515f', avatar: '#e0578a', bubble: '#ffffff', input: '#c9d3da', bar: '#ffffff', label: '#aab6bf', panel: '#ffffff', text: '#14202b' };
+const KSPD = { button: 340, icon: 380, avatar: 280, bubble: 300, input: 300, bar: 230, label: 300, panel: 260 };
+const stageOf = (it) => (it.integ <= 0 ? 3 : it.integ / it.max > 0.66 ? 0 : it.integ / it.max > 0.33 ? 1 : 2);
+
+function notchClip(it) {
+  const r = rectOf(it), w = r.w, h = r.h;
+  if (w < 6 || h < 6 || !it.bites.length) return '';
+  const per = it.shape === 'round' ? Math.PI * (w + h) : 2 * (w + h);
+  const N = clamp(Math.round(per / 9), 28, 120), pts = [], m = Math.min(w, h);
+  for (let i = 0; i < N; i++) {
+    const t = i / N; let x, y;
+    if (it.shape === 'round') { x = w / 2 + Math.cos(t * TAU) * w / 2; y = h / 2 + Math.sin(t * TAU) * h / 2; }
+    else {
+      const d = t * 2 * (w + h);
+      if (d < w) { x = d; y = 0; } else if (d < w + h) { x = w; y = d - w; } else if (d < 2 * w + h) { x = w - (d - w - h); y = h; } else { x = 0; y = h - (d - 2 * w - h); }
+    }
+    pts.push([x, y]);
+  }
+  for (const b of it.bites.slice(-8)) {
+    const bx = b.u * w, by = b.v * h, rad = m * (0.3 + 0.05 * it.stage), depth = m * (0.15 + 0.07 * it.stage);
+    for (const p of pts) {
+      const dx = p[0] - bx, dy = p[1] - by, d = hyp(dx, dy);
+      if (d < rad) {
+        const f = 1 - d / rad, cx = w / 2 - p[0], cy = h / 2 - p[1], cl = hyp(cx, cy) || 1;
+        const k = Math.min(depth * f * (0.75 + 0.5 * Math.sin(d * 0.9 + bx)), cl * 0.85) / cl;
+        p[0] += cx * k; p[1] += cy * k;
+      }
+    }
+  }
+  return 'polygon(' + pts.map((p) => p[0].toFixed(1) + 'px ' + p[1].toFixed(1) + 'px').join(',') + ')';
+}
+function updateDamage(it) {
+  if (it.kind === 'hud' || it.kind === 'text') return;
+  it.stage = stageOf(it);
+  const e = it.el, ratio = clamp(it.integ / it.max, 0, 1);
+  e.style.setProperty('--crack', (1 - ratio).toFixed(2));
+  e.style.clipPath = it.stage >= 1 ? notchClip(it) : '';
+  if (it.kind === 'bar') {
+    if (it.stage >= 1) it.kids.forEach((k) => { if (!k.dead && k.kind !== 'text') k.el.style.transform = 'rotate(' + rnd(-5, 5).toFixed(1) + 'deg) translate(' + rnd(-2, 2).toFixed(1) + 'px,' + rnd(0, 3).toFixed(1) + 'px)'; });
+  } else {
+    it.tilt = it.tilt || (Math.random() < 0.5 ? -1 : 1) * rnd(0.6, 1.3);
+    e.style.transform = it.stage ? 'rotate(' + (it.tilt * it.stage).toFixed(2) + 'deg)' : '';
+  }
+}
+function refreshDamage(tab) { UI.items.forEach((it) => { if (it.tab === tab && !it.dead && it.bites.length) updateDamage(it); }); }
+
+/* ---- snapshot of a live element, used as the picture of a physics piece ---- */
+function snap(it, r) {
+  const c = it.el.cloneNode(true);
+  c.removeAttribute('id'); c.removeAttribute('data-d');
+  c.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
+  c.classList.remove('gl-jit', 'gl-rgb', 'gl-blink', 'sq', 'regrow', 'eaten', 'hide-kids', 'solid');
+  c.querySelectorAll('.solid').forEach((e) => e.classList.remove('solid'));
+  const s = c.style;
+  s.transform = 'none'; s.animation = 'none'; s.visibility = 'visible'; s.position = 'absolute'; s.margin = '0';
+  s.left = '0px'; s.top = '0px'; s.width = r.w + 'px'; s.height = r.h + 'px'; s.flex = 'none'; s.maxWidth = 'none'; s.opacity = '1';
+  if (it.kind === 'bar') c.classList.add('hide-kids');
+  return c;
+}
+function tileGrid(it, r) {
+  let cols = 2, rows = 2; const k = it.kind;
+  if (k === 'icon') { cols = 2; rows = 2; }
+  else if (k === 'button') { cols = clamp(Math.round(r.w / 34), 2, 3); rows = clamp(Math.round(r.h / 26), 1, 2); }
+  else if (k === 'bubble') { cols = clamp(Math.round(r.w / 46), 2, 5); rows = clamp(Math.round(r.h / 26), 1, 3); }
+  else if (k === 'input') { cols = clamp(Math.round(r.w / 80), 2, 4); rows = 1; }
+  else if (k === 'bar') { cols = clamp(Math.round(r.w / 110), 3, 5); rows = 1; }
+  else if (k === 'panel') { cols = 3; rows = 3; }
+  else if (k === 'label') { cols = 2; rows = 1; }
+  if (QL[G.qLevel].bodies < 100) { cols = Math.max(1, cols - 1); rows = Math.max(1, rows - (rows > 2 ? 1 : 0)); }
+  return [cols, rows];
+}
+function markEaten(it) { it.el.classList.add('eaten'); it.regrowAt = G.clock + 7 + rnd(0, 3); }
+
+const SB = { x: 0, y: 0, hot: false };      // extra velocity and 'dangerous' flag handed to shards when the player's slam caused the break
+function shatter(it, mx, my, ivx, ivy, hot) {
+  if (it.dead) return;
+  SB.x = (ivx || 0) * 0.45; SB.y = (ivy || 0) * 0.45; SB.hot = !!hot;
+  it.dead = true; G.stats.eaten++;
+  const r = rectOf(it);
+  markEaten(it);
+  Snd.play('shatter');
+  if (r.w < 3 || r.h < 3) return;
+  const base = KSPD[it.kind] || 280;
+  const push = (tcx, tcy, hw, hh, shape, build, dwv, dhv) => {
+    let dx = tcx - mx, dy = tcy - my, d = hyp(dx, dy);
+    if (d < 1) { dx = rnd(-1, 1); dy = -1; d = hyp(dx, dy); }
+    dx /= d; dy /= d;
+    const spd = base * rnd(0.55, 1.25);
+    const sb = Phys.spawn({ shape, type: 'shard', x: tcx, y: tcy, hw, hh, r: hw, dw: dwv, dh: dhv, vx: dx * spd + V.vx * 0.4 + SB.x, vy: dy * spd - 100 + V.vy * 0.3 + SB.y, va: rnd(-7, 7), tab: it.tab, build });
+    if (SB.hot) { sb.hot = G.clock + 1.3; sb.mass = 0.35; }
+  };
+  if (it.shape === 'round') {
+    const rad = Math.min(r.w, r.h) / 2;
+    push(r.cx, r.cy, rad * 0.96, rad * 0.96, 'c', (el) => { el.style.overflow = 'hidden'; el.appendChild(snap(it, r)); }, r.w, r.h);
+    Fx.emit(r.cx, r.cy, 14, { col: getComputedStyle(it.el).backgroundColor || KCOL.avatar, kind: 'chip', spd: 260 });
+  } else {
+    const [cols, rows] = tileGrid(it, r), tw = r.w / cols, th = r.h / rows;
+    for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
+      const tcx = r.x + tw * (cx + 0.5), tcy = r.y + th * (cy + 0.5);
+      push(tcx, tcy, tw / 2 * 0.94, th / 2 * 0.94, 'b', (el) => {
+        el.style.overflow = 'hidden'; const c = snap(it, r); c.style.left = (-cx * tw) + 'px'; c.style.top = (-cy * th) + 'px'; el.appendChild(c);
+      }, tw, th);
+    }
+    Fx.emit(r.cx, r.cy, 10, { col: KCOL[it.kind] || '#999', kind: 'pix', spd: 220 });
+  }
+  if (it.kind === 'bubble') {                      // the layout really closes up
+    const e = it.el; e.style.height = r.h + 'px'; e.style.overflow = 'hidden'; void e.offsetHeight;
+    e.style.transition = 'height .45s ease,padding .45s ease,margin .45s ease'; e.style.height = '0px'; e.style.padding = '0'; e.style.marginBottom = '-8px';
+    it.regrowAt = 1e12;
+  }
+  if (it.kind === 'bar') it.kids.forEach((k) => { if (!k.dead && k.kind !== 'text') detachWhole(k, mx, my); });
+  it.kids.forEach((k) => { if (k.kind === 'text' && !k.dead) { k.dead = true; k.text.counted = true; } });
+  SB.x = SB.y = 0; SB.hot = false;
+}
+function detachWhole(k, mx, my) {
+  const r = rectOf(k); k.dead = true; G.stats.eaten++; markEaten(k);
+  if (r.w < 3 || r.h < 3) return;
+  const dx = r.cx - mx, dy = r.cy - my, d = hyp(dx, dy) || 1, spd = rnd(80, 220);
+  const round = k.shape === 'round';
+  Phys.spawn({ shape: round ? 'c' : 'b', type: 'shard', x: r.cx, y: r.cy, hw: r.w / 2 * 0.94, hh: r.h / 2 * 0.94, r: Math.min(r.w, r.h) / 2 * 0.96, dw: r.w, dh: r.h, vx: dx / d * spd, vy: dy / d * spd - 60, va: rnd(-5, 5), tab: k.tab, build: (el) => { el.style.overflow = 'hidden'; el.appendChild(snap(k, r)); } });
+}
+
+/* ---- text: grapheme by grapheme ---- */
+function textCS(ti) {
+  if (!ti.cs) { const cs = getComputedStyle(ti.el); ti.cs = { font: cs.font, color: cs.color }; }
+  return ti.cs;
+}
+function checkTextGone(it) {
+  const ti = it.text;
+  if (!ti.counted && textLeftReal(ti) === 0) { ti.counted = true; it.dead = true; G.stats.eaten++; }
+}
+function biteText(it, mx, my, n) {
+  const ti = it.text, cands = [];
+  for (const c of ti.chars) {
+    if (c.st !== 'ok' || c.ws) continue;
+    const rr = c.sp.getBoundingClientRect(); if (rr.width < 1) continue;
+    const x = rr.left - A.left + rr.width / 2, y = rr.top - A.top + rr.height / 2;
+    cands.push({ c, x, y, d: hyp(x - mx, y - my) });
+  }
+  if (!cands.length) { checkTextGone(it); return 0; }
+  cands.sort((a, b) => a.d - b.d);
+  n = Math.min(cands.length, n || 1 + (Math.random() < 0.4 ? 1 : 0) + (Math.random() < 0.15 ? 1 : 0));
+  for (let i = 0; i < n; i++) {
+    const c = cands[i].c; c.st = 'wob'; c.sp.className = 'g wob';
+    later(0.24 + i * 0.05 + rnd(0, 0.06), () => detachChar(it, c, mx, my));
+  }
+  return n;
+}
+function detachChar(it, c, mx, my) {
+  if (c.st !== 'wob') return;
+  const rr = c.sp.getBoundingClientRect();
+  if (rr.width < 1 || !it.el.isConnected) { c.st = 'eaten'; c.sp.className = 'g ea'; checkTextGone(it); return; }
+  const cs = textCS(it.text), x = rr.left - A.left + rr.width / 2, y = rr.top - A.top + rr.height / 2;
+  c.st = 'loose'; c.sp.className = 'g lo';
+  let dx = x - mx, dy = y - my, d = hyp(dx, dy) || 1; dx /= d; dy /= d;
+  const spd = 150 + rnd(0, 280);
+  c.body = Phys.spawn({
+    shape: 'b', type: 'ltr', x, y, hw: Math.max(3, rr.width * 0.42), hh: Math.max(4, rr.height * 0.4), dw: Math.max(4, rr.width), dh: rr.height,
+    vx: dx * spd, vy: dy * spd - 110, va: rnd(-9, 9), a: rnd(-0.3, 0.3), tab: it.tab, ref: { ch: c, it },
+    build: (el) => { el.textContent = c.ch; el.style.font = cs.font; el.style.color = cs.color; },
+  });
+  Fx.emit(x, y, 2, { col: cs.color, kind: 'pix', spd: 90 });
+  checkTextGone(it);
+}
+function swallowLetter(body) {
+  const ref = body.ref; if (!ref) { Phys.swallow(body); return; }
+  const c = ref.ch; c.st = 'eaten'; c.sp.className = 'g ea'; c.body = null;
+  Phys.swallow(body); G.stats.swallowed++;
+  checkTextGone(ref.it);
+}
+
+/* ---- one bite on any UI element ---- */
+function biteItem(it, mx, my) {
+  if (it.dead) return;
+  const r = rectOf(it);
+  if (it.kind === 'text') { if (biteText(it, mx, my)) { Snd.play('bite'); Glitch.hit(mx, my, 1, it); } return; }
+  it.integ--; it.bites.push({ u: clamp((mx - r.x) / Math.max(1, r.w), 0, 1), v: clamp((my - r.y) / Math.max(1, r.h), 0, 1) });
+  Snd.play('bite');
+  if (it.kind === 'hud') { it.integ = it.max; hudGl = G.clock + 0.9; Glitch.hit(mx, my, 2, it); Fx.emit(mx, my, 6, { col: '#ff3b55', kind: 'pix' }); return; }
+  Fx.emit(mx, my, 6, { col: KCOL[it.kind] || '#888', kind: 'pix', spd: 150 });
+  if (it.integ <= 0) { shatter(it, mx, my); Glitch.hit(r.cx, r.cy, 3, it); }
+  else { updateDamage(it); Glitch.hit(mx, my, it.stage >= 2 ? 2 : 1, it); }
+}
+function regrow(it) {
+  it.dead = false; it.pulled = false; it.body = null; it.integ = Math.ceil(it.max * 0.6); it.bites = []; it.stage = 0;
+  const e = it.el; e.classList.remove('eaten'); e.classList.add('regrow'); e.style.clipPath = ''; e.style.transform = '';
+  e.style.setProperty('--crack', '0.35'); later(0.8, () => e.classList.remove('regrow'));
+}
+let regT = 0;
+function updateRegrow(dt) {
+  regT -= dt; if (regT > 0) return; regT = 0.5;
+  for (const it of UI.items) {
+    if (!it.dead || !it.ess || it.kind === 'text' || G.clock < it.regrowAt) continue;
+    if (it.parent && it.parent.dead) continue;
+    if (it.pulled && it.body && !it.body.dead) continue;      // the weapon is still out there
+    if (it.tab !== '*' && it.tab !== G.tab && V.tab === it.tab) continue;
+    if (it.tab === G.tab || it.tab === '*') { const r = rectOf(it); if (V.alive && !V.hidden && V.tab === G.tab && hyp(V.x - r.cx, V.y - r.cy) < 190) continue; }
+    regrow(it);
+  }
+}
+function computeIntegrity() {
+  let tot = 0, alive = 0;
+  for (const it of UI.items) {
+    if (it.kind === 'hud' || it.ess) continue;
+    if (it.kind === 'text') { const n = it.text.chars.filter((c) => !c.ws).length || 1; tot += 0.5; alive += 0.5 * textLeftReal(it.text) / n; continue; }
+    tot += it.w; alive += it.dead && !it.pulled ? 0 : it.w * (0.35 + 0.65 * it.integ / it.max);
+  }
+  G.integ = tot ? alive / tot : 1; G.chaos = clamp(1 - G.integ, 0, 1);
+}
+
+/* ================= Glitch Effect System ================= */
+const SCR = '█▒░▓#?%@&';
+const Glitch = {
+  nCool: 0,
+  flash(el, cls, sec) { if (!el || el.classList.contains('eaten')) return; el.classList.add(cls); later(sec, () => el.classList.remove(cls)); },
+  hit(x, y, sev, it) {
+    const q = QL[G.qLevel];
+    G.shake = Math.max(G.shake, (1.5 + sev * 2.3) * q.shake * (G.reduced ? 0.2 : 1));
+    if (q.bands) Fx.band(x, y, sev);
+    Snd.play(sev >= 2 ? 'glitch' : 'tap');
+    const target = it && it.el;
+    if (target) this.flash(target, sev >= 2 ? 'gl-rgb' : 'gl-jit', 0.5);
+    if (sev >= 2) {
+      for (const o of UI.items) {              // neighbours twitch, distortion stays near the virus
+        if (o === it || o.dead || o.kind === 'text' || !(o.tab === '*' || o.tab === G.tab)) continue;
+        const r = rectOf(o); if (r.w < 4 || hyp(r.cx - x, r.cy - y) > 130 + sev * 25) continue;
+        this.flash(o.el, Math.random() < 0.5 ? 'gl-jit' : 'gl-blink', 0.45);
+      }
+      this.scramble();
+      if (sev >= 3 || Math.random() < 0.3) hudGl = G.clock + 0.8;
+    }
+    if (sev >= 3 && G.clock > this.nCool && G.phase === 'play') { this.nCool = G.clock + 6; const n = pick(NOTIFS); later(0.35, () => toast(n[0], n[1])); }
+  },
+  scramble() {
+    const pool = UI.items.filter((it) => it.kind === 'text' && !it.dead && it.tab === G.tab && textLeftReal(it.text) > 2);
+    if (!pool.length) return;
+    const ti = pick(pool).text, ok = ti.chars.filter((c) => c.st === 'ok' && !c.ws);
+    for (let i = 0; i < Math.min(4, ok.length); i++) {
+      const c = ok[(Math.random() * ok.length) | 0];
+      if (c.sp.className !== 'g') continue;
+      c.sp.textContent = SCR[(Math.random() * SCR.length) | 0]; c.sp.className = 'g scr';
+      later(0.45 + rnd(0, 0.3), () => { if (c.st === 'ok') { c.sp.textContent = c.ch; c.sp.className = 'g'; } });
+    }
+  },
+  ambT: 3,
+  ambient(dt) {
+    this.ambT -= dt; if (this.ambT > 0) return;
+    this.ambT = 4.5 - 3.4 * G.chaos + rnd(0, 2);
+    const dmgd = UI.items.filter((it) => !it.dead && it.kind !== 'text' && it.stage >= 1 && (it.tab === '*' || it.tab === G.tab));
+    if (dmgd.length) this.flash(pick(dmgd).el, pick(['gl-blink', 'gl-jit', 'gl-rgb']), 0.5);
+    if (G.chaos > 0.35 && Math.random() < 0.3) this.scramble();
+    if (G.chaos > 0.45 && G.clock > this.nCool && Math.random() < 0.25 && G.phase === 'play') { this.nCool = G.clock + 8; const n = pick(NOTIFS); toast(n[0], n[1]); }
+  },
+  reset() { this.nCool = 0; this.ambT = 3; hudGl = 0; },
+};
+
+/* ================= Pulling UI out of the layout ================= */
+function pullOut(it, p) {
+  const r = rectOf(it), round = it.shape === 'round';
+  it.dead = true; it.pulled = true; markEaten(it);
+  it.regrowAt = G.clock + 8 + rnd(0, 2);
+  it.el.classList.remove('pull-a', 'pull-b'); it.el.style.transform = '';
+  const mass = clamp(0.5 + r.w * r.h / 9000, 0.6, 3);
+  const body = Phys.spawn({
+    shape: round ? 'c' : 'b', type: 'ui', x: r.cx, y: r.cy, hw: r.w / 2 * 0.96, hh: r.h / 2 * 0.96, r: Math.min(r.w, r.h) / 2 * 0.96, dw: r.w, dh: r.h,
+    tab: it.tab === '*' ? G.tab : it.tab, ref: { it }, mass, build: (el) => { el.style.overflow = 'hidden'; el.appendChild(snap(it, r)); },
+  });
+  it.body = body;
+  if (it.kind === 'bubble') {                      // the layout really closes up where the bubble was
+    const e = it.el; e.style.height = r.h + 'px'; e.style.overflow = 'hidden'; void e.offsetHeight;
+    e.style.transition = 'height .35s ease,padding .35s ease,margin .35s ease'; e.style.height = '0px'; e.style.padding = '0'; e.style.marginBottom = '-8px';
+    it.regrowAt = 1e12;
+  }
+  it.kids.forEach((k) => { if (k.kind === 'text' && !k.dead) { k.dead = true; k.text.counted = true; } });
+  Phys.hold(body, p);
+  Fx.ring(r.cx, r.cy, '#ffb703', Math.max(r.w, r.h) * 0.8); Fx.emit(r.cx, r.cy, 8, { col: KCOL[it.kind] || '#999', kind: 'pix', spd: 200 });
+  G.shake = Math.max(G.shake, 2.5 * QL[G.qLevel].shake);
+  Snd.play('rip');
+  P.pullN++; P.pullKind[it.kind] = (P.pullKind[it.kind] || 0) + 1; heatAdd(P.pullHeat, r.cx, r.cy, 1.2); Learn.rec('pull', true);
+  refreshStatics();
+  return body;
+}
+function canPull(it) {
+  if (!it || it.dead || it.pulled || it.el.dataset.nopull) return false;
+  if (!['button', 'icon', 'avatar', 'bubble', 'label', 'panel'].includes(it.kind)) return false;
+  if (!itemShown(it) || (it.parent && it.parent.dead)) return false;
+  const r = rectOf(it); return r.w >= 12 && r.h >= 12 && r.w < A.w * 0.8 && r.h < A.h * 0.45;
+}
+
+/* ================= UI reaction to impacts: springs, ripples, cracks ================= */
+const UIFx = {
+  list: [], rips: 0,
+  base(it) { return it.stage && it.kind !== 'bar' && it.tilt ? 'rotate(' + (it.tilt * it.stage).toFixed(2) + 'deg)' : ''; },
+  react(it, nx, ny, sev, x, y) {
+    if (!it || it.dead || it.kind === 'hud' || it.kind === 'text' || !itemShown(it)) return;
+    const r = rectOf(it); if (r.w < 8 || r.h < 8 || sev <= 0.01) return;
+    let sp = it.spring;
+    if (!sp) { sp = it.spring = { it, t: 0, a: 0, nx, ny, tq: 0 }; this.list.push(sp); }
+    sp.a = Math.min(1.25, sp.a * Math.exp(-6 * sp.t) + sev); sp.t = 0; sp.nx = nx; sp.ny = ny;
+    sp.tq = clamp(((x - r.cx) * ny - (y - r.cy) * nx) / (Math.max(r.w, r.h) * 0.5), -1, 1) || (Math.random() < 0.5 ? -0.5 : 0.5);
+    if (sev > 0.12 && this.rips < 7 && r.w > 14) {
+      const rp = el$('i', 'rip' + (it.kind === 'bubble' && !it.el.classList.contains('me') ? ' dk' : '')); this.rips++;
+      rp.style.setProperty('--rs', (Math.max(r.w, r.h) * (1 + sev)).toFixed(0) + 'px'); rp.style.setProperty('--rx', clamp(x - r.x, 0, r.w).toFixed(0) + 'px'); rp.style.setProperty('--ry', clamp(y - r.y, 0, r.h).toFixed(0) + 'px');
+      it.el.appendChild(rp); later(0.55, () => { rp.remove(); this.rips = Math.max(0, this.rips - 1); });
+    }
+  },
+  near(x, y, sev, skip, nx, ny) {
+    const rad = 70 + 150 * sev;
+    for (const o of UI.items) {
+      if (o === skip || o.dead || o.kind === 'text' || o.kind === 'hud' || o.kind === 'bar' || !itemShown(o)) continue;
+      const r = rectOf(o), d = hyp(r.cx - x, r.cy - y); if (d > rad) continue;
+      const f = 1 - d / rad, ux = (r.cx - x) / (d || 1), uy = (r.cy - y) / (d || 1);
+      this.react(o, -ux, -uy, sev * 0.5 * f, x, y);
+    }
+  },
+  damage(it, sev, x, y, ivx, ivy) {                 // stronger hits crack the element; a weak one breaks it apart instead of bouncing back
+    if (!it || it.dead || it.kind === 'hud' || it.kind === 'text') return false;
+    if (sev < 0.3) return false;
+    it.integ -= sev > 0.7 ? 2 : 1;
+    if (it.integ <= 0 || (it.stage >= 2 && sev > 0.55)) { it.integ = 0; shatter(it, x, y, ivx, ivy, true); Glitch.hit(x, y, 2, it); return true; }
+    updateDamage(it); return false;
+  },
+  update(dt) {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const sp = this.list[i], it = sp.it; sp.t += dt;
+      const k = sp.a * Math.exp(-6 * sp.t);
+      if (k < 0.012 || it.dead || it.pulled) { if (!it.dead) it.el.style.transform = this.base(it); it.spring = null; this.list.splice(i, 1); continue; }
+      const w = 24 * sp.t, osc = Math.cos(w), ang = Math.atan2(sp.ny, sp.nx), sq = 0.3 * k * osc, push = 9 * k * (1 - osc) * 0.5;
+      it.el.style.transform = this.base(it) + ' translate(' + (-sp.nx * push).toFixed(2) + 'px,' + (-sp.ny * push).toFixed(2) + 'px) rotate(' + (sp.tq * 9 * k * Math.sin(w)).toFixed(2) + 'deg) rotate(' + ang.toFixed(3) + 'rad) scale(' + (1 - sq).toFixed(3) + ',' + (1 + sq * 0.7).toFixed(3) + ') rotate(' + (-ang).toFixed(3) + 'rad)';
+    }
+  },
+  clear() { this.list.length = 0; this.rips = 0; },
+};
+
+/* ================= canvases + particles ================= */
+const cF = $('#cFront'), cB = $('#cBack'), xF = cF.getContext('2d'), xB = cB.getContext('2d');
+function sizeCanvases() {
+  [[cF, xF], [cB, xB]].forEach(([c, x]) => {
+    c.width = Math.max(2, Math.round(A.w * A.dpr)); c.height = Math.max(2, Math.round(A.h * A.dpr));
+    x.setTransform(A.dpr, 0, 0, A.dpr, 0, 0);
+  });
+}
+const mix = (c1, c2, t) => 'rgb(' + c1.map((v, i) => Math.round(v + (c2[i] - v) * t)).join(',') + ')';
+
+const Fx = {
+  P: [], free: [], bands: [],
+  emit(x, y, n, o) {
+    o = o || {}; const cap = QL[G.qLevel].parts;
+    for (let i = 0; i < n && this.P.length < cap; i++) {
+      const p = this.free.pop() || {}, a = rnd(0, TAU), s = (o.spd || 160) * rnd(0.3, 1);
+      p.x = x; p.y = y; p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - (o.up || 40); p.m = p.l = (o.life || 0.7) * rnd(0.6, 1.2);
+      p.s = (o.size || 4) * rnd(0.6, 1.4); p.c = o.col || '#e5243b'; p.k = o.kind || 'pix'; p.g = o.grav === undefined ? 1 : o.grav; p.r = 0;
+      this.P.push(p);
+    }
+  },
+  ring(x, y, col, max) { if (this.P.length >= QL[G.qLevel].parts) return; const p = this.free.pop() || {}; p.x = x; p.y = y; p.vx = p.vy = 0; p.m = p.l = 0.5; p.s = max || 60; p.c = col || '#ff8896'; p.k = 'ring'; p.g = 0; this.P.push(p); },
+  band(x, y, sev) {
+    const q = QL[G.qLevel], n = (1 + sev) * q.bands;
+    for (let i = 0; i < n; i++) this.bands.push({ x: clamp(x - rnd(40, 160), 0, A.w - 60), y: y + rnd(-60, 60), w: rnd(90, 260), h: rnd(2, 8 + sev * 3), dx: rnd(3, 9) * (Math.random() < 0.5 ? -1 : 1), l: 0.22 + rnd(0, 0.15) });
+    if (this.bands.length > 24) this.bands.splice(0, this.bands.length - 24);
+  },
+  clear() { while (this.P.length) this.free.push(this.P.pop()); this.bands.length = 0; },
+  update(dt) {
+    for (let i = this.P.length - 1; i >= 0; i--) {
+      const p = this.P[i]; p.l -= dt;
+      if (p.l <= 0) { this.free.push(p); this.P[i] = this.P[this.P.length - 1]; this.P.pop(); continue; }
+      if (p.k === 'ring') { p.r = (1 - p.l / p.m) * p.s; continue; }
+      p.vy += 1300 * p.g * dt; p.vx *= 1 - 1.2 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.y > A.h - 2) { p.y = A.h - 2; p.vy *= -0.3; p.vx *= 0.7; }
+    }
+    for (let i = this.bands.length - 1; i >= 0; i--) { this.bands[i].l -= dt; if (this.bands[i].l <= 0) this.bands.splice(i, 1); }
+  },
+  draw(x) {
+    for (const p of this.P) {
+      x.globalAlpha = clamp(p.l / p.m * 1.6, 0, 1);
+      if (p.k === 'ring') { x.strokeStyle = p.c; x.lineWidth = 3 * (1 - p.l / p.m) + 1; x.beginPath(); x.arc(p.x, p.y, p.r, 0, TAU); x.stroke(); continue; }
+      x.fillStyle = p.c;
+      if (p.k === 'pix') x.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+      else { x.beginPath(); x.arc(p.x, p.y, p.k === 'gel' ? p.s * 1.1 : p.s * 0.8, 0, TAU); x.fill(); }
+    }
+    x.globalAlpha = 1;
+    for (const b of this.bands) {
+      x.globalAlpha = clamp(b.l * 4, 0, 0.5);
+      x.fillStyle = '#ff2a55'; x.fillRect(b.x + b.dx, b.y, b.w, b.h);
+      x.fillStyle = '#18d4ff'; x.fillRect(b.x - b.dx, b.y + b.h * 0.5, b.w, b.h);
+    }
+    x.globalAlpha = 1;
+  },
+};
+
+/* ================= Virus entity: soft body, face, colliders ================= */
+const V0 = JSON.stringify(V);
+const Virus = {
+  reset() {
+    Object.assign(V, JSON.parse(V0));
+    V.nodes = []; V.nubs = [];
+    for (let i = 0; i < 22; i++) V.nodes.push({ d: 0, dv: 0 });
+    for (let i = 0; i < 11; i++) V.nubs.push({ x: 0, y: 0, vx: 0, vy: 0 });
+    V.R = clamp(Math.min(A.w, A.h) * 0.075, 24, 40);
+    V.tab = G.tab; V.hp = V.hpMax;
+    this.place(A.w * 0.5, A.h * 0.42); V.spawnT = 0.01;
+  },
+  place(x, y) {
+    V.x = x; V.y = y; V.vx = V.vy = 0;
+    const n = QL[G.qLevel].nodes;
+    for (let k = 0; k < V.nubs.length; k++) { const a = (2 * k) / n * TAU; V.nubs[k].x = x + Math.cos(a) * V.R; V.nubs[k].y = y + Math.sin(a) * V.R; V.nubs[k].vx = V.nubs[k].vy = 0; }
+  },
+  size() { return V.R * V.sc * (1 + V.grow + (V.spawnT > 0 && V.spawnT < 1 ? (1 - V.spawnT) * -0.4 : 0)); },
+  impact(nx, ny, mag) {
+    V.stAng = Math.atan2(ny, nx); V.stretch = -Math.min(0.42, mag / 1100); V.stV = 0;
+    const n = QL[G.qLevel].nodes;
+    for (let i = 0; i < n; i++) { const a = i / n * TAU + V.spin, dot = Math.cos(a) * nx + Math.sin(a) * ny; V.nodes[i].dv += dot * Math.min(260, mag * 0.3); }
+  },
+  jolt(mag) { const n = QL[G.qLevel].nodes; for (let i = 0; i < n; i++) V.nodes[i].dv += rnd(-mag, mag * 1.4); },
+  colliders() {
+    const R = this.size(), s = Math.max(0, V.stretch), off = R * 0.55 * s * 2.2, ca = Math.cos(V.stAng), sa = Math.sin(V.stAng);
+    const body = { x: V.x, y: V.y, r: R * (1 - Math.abs(V.stretch) * 0.12), vx: V.vx, vy: V.vy };
+    if (s < 0.08) return [body];
+    return [body, { x: V.x + ca * off, y: V.y + sa * off, r: R * 0.74, vx: V.vx, vy: V.vy }, { x: V.x - ca * off, y: V.y - sa * off, r: R * 0.74, vx: V.vx, vy: V.vy }];
+  },
+  integrate(dt) {
+    const pad = V.R * 0.85, px = V.vx, py = V.vy, held = !!V.grab, solid = V.proj > 0 || held;
+    if (!held) { const k = solid ? 0.9 : 0.5; V.vx *= Math.exp(-k * dt); V.vy *= Math.exp(-k * dt); }
+    if (!held && (V.proj > 0 || V.stun > 0)) V.vy += 800 * sizeK() * dt;           // a flung or dazed virus falls like a blob of gel
+    const sp = hyp(V.vx, V.vy), cap = solid ? 1750 : V.dashT > 0 ? 780 : 520; if (sp > cap) { V.vx *= cap / sp; V.vy *= cap / sp; }
+    const n = clamp(Math.ceil(hyp(V.vx, V.vy) * dt / (V.R * 0.6)), 1, 5), sdt = dt / n;
+    for (let i = 0; i < n; i++) {
+      V.x += V.vx * sdt; V.y += V.vy * sdt;
+      this.collide(pad, solid);
+    }
+    V.ax = damp(V.ax, (V.vx - px) / Math.max(dt, 1e-3), 18, dt); V.ay = damp(V.ay, (V.vy - py) / Math.max(dt, 1e-3), 18, dt);
+  },
+  collide(pad, solid) {
+    const rest = solid ? 0.5 : V.dashT > 0 ? 0.78 : 0.6;
+    const wall = (nx, ny, spd, x, y, key) => { Combat.virusHit({ src: key, nx, ny, spd, x, y, kind: 'wall' }); };
+    if (V.x < pad) { V.x = pad; if (V.vx < 0) { const s = -V.vx; V.vx = s * rest; wall(1, 0, s, 0, V.y, 'wallL'); } }
+    else if (V.x > A.w - pad) { V.x = A.w - pad; if (V.vx > 0) { const s = V.vx; V.vx = -s * rest; wall(-1, 0, s, A.w, V.y, 'wallR'); } }
+    if (V.y < pad) { V.y = pad; if (V.vy < 0) { const s = -V.vy; V.vy = s * rest; wall(0, 1, s, V.x, 0, 'ceil'); } }
+    else if (V.y > A.h - pad) { V.y = A.h - pad; if (V.vy > 0) { const s = V.vy; V.vy = -s * rest; wall(0, -1, s, V.x, A.h, 'floor'); } }
+    if (!solid) return;
+    const r = this.size() * 0.9, passSpd = 260 * sizeK();
+    for (const st of Phys.S) {
+      if (st.w > A.w * 0.98 && st.h > A.h * 0.6) continue;
+      const cx = clamp(V.x, st.x, st.x + st.w), cy = clamp(V.y, st.y, st.y + st.h), dx = V.x - cx, dy = V.y - cy, d2 = dx * dx + dy * dy;
+      if (d2 >= r * r) continue;
+      let nx, ny, pen;
+      if (d2 > 1e-6) { const d = Math.sqrt(d2); nx = dx / d; ny = dy / d; pen = r - d; }
+      else {
+        const l = V.x - st.x, rr = st.x + st.w - V.x, t = V.y - st.y, b = st.y + st.h - V.y, m = Math.min(l, rr, t, b);
+        if (m === l) { nx = -1; ny = 0; pen = l + r; } else if (m === rr) { nx = 1; ny = 0; pen = rr + r; } else if (m === t) { nx = 0; ny = -1; pen = t + r; } else { nx = 0; ny = 1; pen = b + r; }
+      }
+      const vn = V.vx * nx + V.vy * ny;
+      if (vn >= -passSpd) continue;                              // slow drags slide over UI; only real impacts collide
+      V.x += nx * pen; V.y += ny * pen;
+      V.vx -= (1 + 0.45) * vn * nx; V.vy -= (1 + 0.45) * vn * ny;
+      Combat.virusHit({ src: 'ui' + st.id, nx, ny, spd: -vn, x: V.x - nx * r, y: V.y - ny * r, kind: 'ui', item: st.el ? UI.byEl.get(st.el) : null });
+    }
+  },
+  update(dt) {
+    const n = QL[G.qLevel].nodes, R = V.R;
+    V.breath += dt * (V.state === 'desperate' ? 9 : V.state === 'recover' ? 1.6 : 3.2);
+    V.spin += dt * 0.25;
+    for (let i = 0; i < n; i++) {
+      const nd = V.nodes[i], a = i / n * TAU + V.spin, nx = Math.cos(a), ny = Math.sin(a);
+      const l = V.nodes[(i + n - 1) % n].d, r = V.nodes[(i + 1) % n].d;
+      let f = -nd.d * 150 - nd.dv * 9.5 + (l + r - 2 * nd.d) * 70 - (V.ax * nx + V.ay * ny) * 0.0065;
+      if (V.suck > 0) f += Math.sin(V.breath * 3 + i) * 90 * V.suck;
+      if (V.mouth > 0.1) f += Math.sin(V.chew * 20 + i * 0.9) * 120 * V.mouth;
+      nd.dv += f * dt; nd.d = clamp(nd.d + nd.dv * dt, -R * 0.45, R * 0.5);
+    }
+    const sz = this.size();
+    for (let k = 0; k < V.nubs.length && 2 * k < n; k++) {
+      const i = 2 * k, a = i / n * TAU + V.spin, ax = V.x + Math.cos(a) * (sz * 0.98 + V.nodes[i].d), ay = V.y + Math.sin(a) * (sz * 0.98 + V.nodes[i].d), nb = V.nubs[k];
+      nb.vx += ((ax - nb.x) * 240 - nb.vx * 12) * dt; nb.vy += ((ay - nb.y) * 240 - nb.vy * 12) * dt; nb.x += nb.vx * dt; nb.y += nb.vy * dt;
+    }
+    // stretch follows speed; impacts squash first and spring back
+    const sp = hyp(V.vx, V.vy); let tgt = clamp(sp / 1500, 0, 0.32);
+    if (V.grab) {                                 // stretched toward the finger by the spring joint
+      const gp = Input.ptrs.get(V.grab.id);
+      if (gp) { const dx = gp.x - V.x, dy = gp.y - V.y, dd = hyp(dx, dy); tgt = Math.max(tgt, clamp(dd / (V.R * 3), 0, 0.36)); if (dd > 4 && V.stretch > -0.05) V.stAng = V.stAng + angDiff(V.stAng, Math.atan2(dy, dx)) * Math.min(1, 16 * dt); }
+      V.rot = damp(V.rot, clamp(V.vx / 1000, -0.6, 0.6), 9, dt); V.rotV = 0;
+    } else if (V.proj > 0 || V.stun > 0) { V.rot += V.rotV * dt; V.rotV *= Math.exp(-0.9 * dt); }
+    else { V.rot = damp(V.rot, 0, 4, dt); V.rotV *= Math.exp(-4 * dt); }
+    if (!V.grab && sp > 60 && V.stretch > -0.05) V.stAng = V.stAng + angDiff(V.stAng, Math.atan2(V.vy, V.vx)) * Math.min(1, 14 * dt);
+    V.stV += ((tgt - V.stretch) * 190 - V.stV * 15) * dt; V.stretch += V.stV * dt;
+    V.hurt = Math.max(0, V.hurt - dt); V.happy = Math.max(0, V.happy - dt); V.startle = Math.max(0, V.startle - dt); V.feint = Math.max(0, V.feint - dt);
+    V.grow = damp(V.grow, 0, 0.5, dt);
+    V.blinkT -= dt; if (V.blinkT <= 0) { V.blink = 1; V.blinkT = rnd(1.6, 4.2); }
+    V.blink = Math.max(0, V.blink - dt * 8);
+    if (V.spawnT > 0 && V.spawnT < 1) V.spawnT = Math.min(1, V.spawnT + dt * 2.2);
+    // expression targets from state
+    const e = V.exp; let t = { brow: 0.5, lid: 0, wide: 0, mouth: 0, tongue: 0 };
+    if (V.dying > 0) t = { brow: 0.1, lid: 0, wide: 1, mouth: 0.9, tongue: 0 };
+    else if (V.hurt > 0) t = { brow: 0.05, lid: 0, wide: 0.3, mouth: 0.4, tongue: 0 };
+    else switch (V.state) {
+      case 'idle': t.lid = V.feint > 0 ? 0.6 : 0; t.brow = 0.35; break;
+      case 'explore': t.brow = 0.3; break;
+      case 'hunt': t.brow = 0.75; break;
+      case 'attack': t.brow = 0.8; t.mouth = 0.15 + 0.7 * V.mouth; break;
+      case 'evade': case 'dodge': t.wide = 0.55; t.brow = 0.1; t.mouth = 0.15; break;
+      case 'flee': t.wide = 0.8; t.brow = 0; t.mouth = 0.35; break;
+      case 'hide': t.lid = 0.3; t.brow = 0.55; break;
+      case 'migrate': t.wide = 0.4; t.brow = 0.6; t.mouth = 0.25; break;
+      case 'recover': t.lid = 0.95; t.brow = 0.1; break;
+      case 'taunt': t.tongue = 1; t.brow = 0.55; t.mouth = 0.05; break;
+      case 'desperate': t.wide = 0.6; t.brow = 0.95; t.mouth = 0.5; break;
+      case 'grabbed': t.wide = 0.5 + 0.4 * V.esc; t.brow = 0.85; t.mouth = 0.35 + 0.4 * Math.abs(Math.sin(G.clock * 18)); break;
+      case 'thrown': t.wide = 1; t.brow = 0.1; t.mouth = 0.8; break;
+      case 'stunned': t.lid = 0.25; t.brow = 0.1; t.mouth = 0.25; break;
+      case 'evolve': t.brow = 1; t.wide = 0.2; t.mouth = 0.5; break;
+      default: break;
+    }
+    if (V.startle > 0) { t.wide = 1; t.lid = 0; }
+    for (const k in t) e[k] = damp(e[k], t[k], 13, dt);
+    V.mouth = V.mouth > 0 ? V.mouth : 0;
+    if (V.dying > 0) {
+      V.dying -= dt; V.grow = 0.18 * (1 - V.dying / 0.9); this.jolt(220);
+      if (V.dying <= 0 && !V.dead) this.burst();
+    }
+  },
+  burst() {
+    V.dead = true; V.alive = false;
+    Fx.emit(V.x, V.y, 70, { col: '#e5243b', kind: 'gel', spd: 560, size: 5, life: 1.3, up: 120 });
+    Fx.emit(V.x, V.y, 26, { col: '#8f0e20', kind: 'gel', spd: 360, size: 4, life: 1.1 });
+    Fx.emit(V.x, V.y, 20, { col: '#ffd0d6', kind: 'pix', spd: 520, size: 5, life: 0.8 });
+    Fx.ring(V.x, V.y, '#ff8896', V.R * 4); Fx.ring(V.x, V.y, '#ffffff', V.R * 2.4);
+    G.shake = 16 * QL[G.qLevel].shake; Snd.play('shatter');
+    later(1.2, () => Game.win());
+  },
+  /* ---- drawing ---- */
+  draw() {
+    if (V.hidden || V.tab !== G.tab || (V.dead && V.spawnT >= 1 && !V.alive && V.dying <= 0)) return;
+    if (V.dead) return;
+    const x = V.back ? xB : xF, n = QL[G.qLevel].nodes, sz = this.size() * (V.spawnT < 1 ? 0.6 + 0.4 * V.spawnT : 1) * (V.evoT > 0 ? 1 + 0.16 * Math.sin(V.evoT * 14) * Math.min(1, V.evoT) : 1), t = G.clock;
+    const flash = clamp(V.hurt * 3.5, 0, 1) + (V.dying > 0 ? (Math.sin(t * 60) * 0.5 + 0.5) * 0.7 : 0) + (V.evoT > 0 ? (Math.sin(V.evoT * 22) * 0.5 + 0.5) * 0.8 : 0);
+    const PL = Evo.pal(V.lvl); let c1 = PL.c1, c2 = PL.c2, c3 = PL.c3;
+    const lowHp = 1 - V.hp / V.hpMax;
+    c3 = c3.map((v, i) => v + ([120, 50, 70][i] - v) * lowHp * 0.25);
+    let m2 = mix(c2, [255, 255, 255], flash * 0.8);
+    if (V.state === 'desperate') m2 = mix(c2, [255, 120, 40], 0.5 + 0.5 * Math.sin(t * 16));
+    else if (V.state === 'recover') m2 = mix(c2, [255, 140, 160], 0.3);
+    x.save();
+    if (QL[G.qLevel].glow && !V.back) {
+      const g = x.createRadialGradient(V.x, V.y, sz * 0.6, V.x, V.y, sz * 2); g.addColorStop(0, 'rgba(229,36,59,.28)'); g.addColorStop(1, 'rgba(229,36,59,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(V.x, V.y, sz * 2, 0, TAU); x.fill();
+    }
+    x.translate(V.x, V.y); x.rotate(V.stAng);
+    const sa = 1 + V.stretch, sb = 1 / Math.pow(Math.max(0.5, sa), 0.8);
+    x.scale(sa, sb); x.rotate(-V.stAng); x.rotate(V.rot);
+    this.extras(x, sz, PL, t);
+    // nubs
+    for (let k = 0; k < V.nubs.length && 2 * k < n; k++) {
+      const nb = V.nubs[k], r = sz * (0.2 + 0.03 * Math.sin(t * 5 + k)), ox = nb.x - V.x, oy = nb.y - V.y;
+      x.fillStyle = mix(c2, [140, 10, 30], 0.2); x.strokeStyle = '#7a0b1b'; x.lineWidth = 1.5;
+      x.beginPath(); x.arc(ox, oy, r, 0, TAU); x.fill(); x.stroke();
+      x.fillStyle = 'rgba(255,200,208,.55)'; x.beginPath(); x.arc(ox - r * 0.3, oy - r * 0.3, r * 0.28, 0, TAU); x.fill();
+    }
+    // jelly outline through soft nodes
+    const pts = [];
+    for (let i = 0; i < n; i++) { const a = i / n * TAU + V.spin, r = sz * (1 + 0.04 * Math.sin(V.breath + i * 1.3)) + V.nodes[i].d; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+    x.beginPath();
+    const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    let s0 = mid(pts[n - 1], pts[0]); x.moveTo(s0[0], s0[1]);
+    for (let i = 0; i < n; i++) { const m = mid(pts[i], pts[(i + 1) % n]); x.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]); }
+    x.closePath();
+    const gr = x.createRadialGradient(-sz * 0.3, -sz * 0.35, sz * 0.1, 0, 0, sz * 1.15);
+    gr.addColorStop(0, mix(c1, [255, 255, 255], flash * 0.8)); gr.addColorStop(0.55, m2); gr.addColorStop(1, mix(c3, [255, 255, 255], flash * 0.5));
+    x.fillStyle = gr; x.fill(); x.strokeStyle = PL.line; x.lineWidth = 2; x.stroke();
+    x.fillStyle = 'rgba(120,6,24,.16)';
+    for (let k = 0; k < 3; k++) { const a = V.spin * 2 + k * 2.1; x.beginPath(); x.arc(Math.cos(a) * sz * 0.5, Math.sin(a) * sz * 0.45 + sz * 0.15, sz * (0.12 + 0.03 * k), 0, TAU); x.fill(); }
+    x.fillStyle = 'rgba(255,255,255,.35)'; x.beginPath(); x.ellipse(-sz * 0.38, -sz * 0.52, sz * 0.2, sz * 0.1, -0.6, 0, TAU); x.fill();
+    x.restore();
+    this.face(x, sz);
+    if (!V.back) this.grabFx(sz);
+  },
+  extras(x, sz, PL, t) {                          // evolution look: spikes, aura, crown
+    const L = V.lvl;
+    if (L >= 6) { x.save(); x.globalAlpha = 0.28 + 0.1 * Math.sin(t * 3); x.strokeStyle = PL.aura; x.lineWidth = 3; x.setLineDash([6, 8]); x.lineDashOffset = -t * 20; x.beginPath(); x.arc(0, 0, sz * (1.42 + 0.03 * Math.sin(t * 4)), 0, TAU); x.stroke(); x.restore(); }
+    const ns = Math.max(0, L - 2);
+    if (ns) {
+      x.fillStyle = PL.c3s; x.strokeStyle = PL.line; x.lineWidth = 1.5;
+      for (let k = 0; k < ns; k++) {
+        const a = k / ns * TAU + V.spin * 1.4, bw = 0.13 + 0.01 * L, tip = sz * (1.2 + 0.025 * L);
+        x.beginPath(); x.moveTo(Math.cos(a - bw) * sz * 0.92, Math.sin(a - bw) * sz * 0.92); x.lineTo(Math.cos(a) * tip, Math.sin(a) * tip); x.lineTo(Math.cos(a + bw) * sz * 0.92, Math.sin(a + bw) * sz * 0.92); x.closePath(); x.fill(); x.stroke();
+      }
+    }
+    if (L >= 10) { x.save(); x.strokeStyle = '#ffd24a'; x.lineWidth = 2.5; x.globalAlpha = 0.85; for (let k = 0; k < 7; k++) { const a = -Math.PI / 2 + (k - 3) * 0.3 - V.rot; x.beginPath(); x.moveTo(Math.cos(a) * sz * 1.0, Math.sin(a) * sz * 1.0); x.lineTo(Math.cos(a) * sz * (k % 2 ? 1.28 : 1.45), Math.sin(a) * sz * (k % 2 ? 1.28 : 1.45)); x.stroke(); } x.restore(); }
+  },
+  grabFx(sz) {
+    const x = xF;
+    if (V.gripP > 0.02 && !V.grab) {                // grip charging: an amber ring fills while the finger pins it down
+      x.save(); x.strokeStyle = '#ffb703'; x.lineWidth = 4; x.lineCap = 'round'; x.globalAlpha = 0.9;
+      x.beginPath(); x.arc(V.x, V.y, sz * 1.25, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(V.gripP, 0, 1)); x.stroke(); x.restore();
+    }
+    if (V.grab) {
+      const p = Input.ptrs.get(V.grab.id);
+      x.save(); x.lineCap = 'round';
+      x.strokeStyle = 'rgba(20,32,43,.28)'; x.lineWidth = 5; x.beginPath(); x.arc(V.x, V.y, sz * 1.32, 0, TAU); x.stroke();      // escape meter: red means it is about to slip free
+      const e = clamp(V.esc, 0, 1); x.strokeStyle = e < 0.5 ? '#2fd47a' : e < 0.8 ? '#ffb703' : '#ff3b55'; x.lineWidth = 5;
+      x.beginPath(); x.arc(V.x, V.y, sz * 1.32, -Math.PI / 2, -Math.PI / 2 + TAU * e); x.stroke();
+      if (p) {
+        const dx = p.x - V.x, dy = p.y - V.y, d = hyp(dx, dy) || 1, sx = V.x + dx / d * sz * 0.8, sy = V.y + dy / d * sz * 0.8;
+        if (d > sz * 0.9) { x.strokeStyle = 'rgba(255,255,255,.75)'; x.lineWidth = 3; x.beginPath(); x.moveTo(sx, sy); x.quadraticCurveTo((sx + p.x) / 2 + dy / d * 8 * Math.sin(G.clock * 30), (sy + p.y) / 2 - dx / d * 8 * Math.sin(G.clock * 30), p.x, p.y); x.stroke(); }
+        x.strokeStyle = '#ffb703'; x.lineWidth = 3; x.beginPath(); x.arc(p.x, p.y, 17, 0, TAU); x.stroke();
+      }
+      x.restore();
+    }
+    if (V.stun > 0) {                                // stars circle the head while stunned
+      x.save(); x.fillStyle = '#ffd24a';
+      for (let k = 0; k < 3; k++) { const a = G.clock * 5 + k * 2.09, sx = V.x + Math.cos(a) * sz * 0.8, sy = V.y - sz * 1.15 + Math.sin(a) * sz * 0.18, r = 5 + 2 * Math.sin(a * 2); x.beginPath(); for (let j = 0; j < 10; j++) { const rr = j % 2 ? r * 0.45 : r, aa = j / 10 * TAU - Math.PI / 2; x.lineTo(sx + Math.cos(aa) * rr, sy + Math.sin(aa) * rr); } x.closePath(); x.fill(); }
+      x.restore();
+    }
+  },
+  face(x, R) {
+    const e = V.exp, lean = clamp(V.vx / 1000, -0.25, 0.25);
+    x.save(); x.translate(V.x + V.look.x * R * 0.1, V.y + V.look.y * R * 0.07); x.rotate(lean + V.rot);
+    const dizzy = V.stun > 0;
+    const er = R * (0.27 + 0.05 * e.wide), ex = R * 0.37, ey = -R * 0.1;
+    const lid = Math.max(V.blink, e.lid), happy = V.happy > 0.05 && V.hurt <= 0, ouch = V.hurt > 0.04;
+    for (const side of [-1, 1]) {
+      const cx = side * ex;
+      if (dizzy) {
+        x.strokeStyle = '#2a0a10'; x.lineWidth = R * 0.1; x.lineCap = 'round'; x.beginPath();
+        x.moveTo(cx - er * 0.7, ey - er * 0.7); x.lineTo(cx + er * 0.7, ey + er * 0.7); x.moveTo(cx + er * 0.7, ey - er * 0.7); x.lineTo(cx - er * 0.7, ey + er * 0.7); x.stroke(); continue;
+      }
+      if (happy) {
+        x.strokeStyle = '#2a0a10'; x.lineWidth = R * 0.1; x.lineCap = 'round'; x.beginPath(); x.arc(cx, ey + er * 0.5, er * 0.8, Math.PI * 1.15, Math.PI * 1.85); x.stroke(); continue;
+      }
+      if (ouch) {
+        x.strokeStyle = '#2a0a10'; x.lineWidth = R * 0.1; x.lineCap = 'round'; x.beginPath();
+        x.moveTo(cx - side * er * 0.8, ey - er * 0.7); x.lineTo(cx + side * er * 0.5, ey); x.lineTo(cx - side * er * 0.8, ey + er * 0.7); x.stroke(); continue;
+      }
+      const ry = Math.max(er * 0.12, er * (1 - 0.92 * lid));
+      x.fillStyle = '#fff'; x.beginPath(); x.ellipse(cx, ey, er, ry, 0, 0, TAU); x.fill();
+      x.strokeStyle = '#5a0716'; x.lineWidth = 1.5; x.stroke();
+      if (lid < 0.8) {
+        const pr = er * (V.state === 'desperate' ? 0.4 : V.state === 'flee' ? 0.38 : 0.5);
+        x.fillStyle = '#2a0a10'; x.beginPath(); x.arc(cx + V.look.x * er * 0.45, ey + V.look.y * er * 0.4, pr, 0, TAU); x.fill();
+        x.fillStyle = '#fff'; x.beginPath(); x.arc(cx + V.look.x * er * 0.45 - pr * 0.3, ey + V.look.y * er * 0.4 - pr * 0.3, pr * 0.28, 0, TAU); x.fill();
+        if (e.brow > 0.05) {          // angry lid cut across the top of the eye
+          x.save(); x.beginPath(); x.ellipse(cx, ey, er, ry, 0, 0, TAU); x.clip();
+          x.fillStyle = '#b5122a'; x.beginPath();
+          x.moveTo(cx + side * er * 1.3, ey - er * 2); x.lineTo(cx - side * er * 1.3, ey - er * 2);
+          x.lineTo(cx - side * er * 1.3, ey - er * 1.1 + e.brow * er * 1.5); x.lineTo(cx + side * er * 1.3, ey - er * 1.1); x.closePath(); x.fill(); x.restore();
+        }
+      }
+      x.strokeStyle = '#6e0818'; x.lineWidth = R * 0.09; x.lineCap = 'round'; x.beginPath();
+      x.moveTo(cx + side * er * 1.2, ey - er * 1.15); x.lineTo(cx - side * er * 1.15, ey - er * 1.15 + e.brow * er * 1.5); x.stroke();
+    }
+    // mouth
+    const my = R * 0.42, open = clamp(e.mouth, 0, 1);
+    if (open > 0.12) {
+      x.fillStyle = '#3a0610'; x.beginPath(); x.ellipse(0, my, R * 0.24, R * (0.04 + 0.2 * open), 0, 0, TAU); x.fill();
+      x.fillStyle = '#fff';
+      for (let k = -1; k <= 1; k += 1) { x.beginPath(); x.moveTo(k * R * 0.12 - R * 0.05, my - R * (0.04 + 0.2 * open) * 0.9); x.lineTo(k * R * 0.12 + R * 0.05, my - R * (0.04 + 0.2 * open) * 0.9); x.lineTo(k * R * 0.12, my - R * (0.04 + 0.2 * open) * 0.9 + R * 0.09); x.fill(); }
+    } else {
+      x.strokeStyle = '#3a0610'; x.lineWidth = R * 0.07; x.lineCap = 'round'; x.beginPath();
+      x.moveTo(-R * 0.2, my - R * 0.02); x.quadraticCurveTo(R * 0.02, my + R * 0.1 + e.tongue * R * 0.06, R * 0.22, my - R * 0.06); x.stroke();
+    }
+    if (e.tongue > 0.3) { x.fillStyle = '#ff7f98'; x.beginPath(); x.ellipse(R * 0.1, my + R * 0.14, R * 0.1, R * 0.15 * e.tongue, 0.2, 0, TAU); x.fill(); }
+    if (V.state === 'recover' && !V.hidden) { x.fillStyle = 'rgba(255,255,255,.85)'; x.font = '700 ' + Math.round(R * 0.5) + 'px monospace'; x.fillText('z', R * 0.7, -R * 0.7 + Math.sin(G.clock * 2) * 3); }
+    x.restore();
+  },
+};
+function angDiff(a, b) { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; }
+
+/* ================= AI Behavior Controller + Tab Migration ================= */
+const sizeK = () => clamp(Math.min(A.w, A.h) / 420, 0.8, 1.25);
+const vmax = () => lerp(185, 330, G.diff) * sizeK() * Evo.p('spd');
+/* what the virus fears at a point: learned from where the player taps, grabs, slams and rips UI off */
+function dangerAt(x, y) {
+  const l = Evo.learn(); if (l <= 0.05) return 0;
+  const wr = Learn.wallRatio(), edge = clamp(1 - Math.min(x, A.w - x, y, A.h - y) / (V.R * 4), 0, 1);
+  return l * (0.7 * heatAt(P.heat, x, y) + 0.5 * heatAt(P.trap, x, y) + 0.55 * heatAt(P.slamHeat, x, y) * (0.4 + wr) + 0.5 * heatAt(P.pullHeat, x, y) + 0.35 * heatAt(P.grabHeat, x, y) + 0.5 * wr * edge);
+}
+function losBlocked(fx, fy, x, y) {                 // is a piece of UI between the finger and this point?
+  let n = 0;
+  for (let i = 1; i <= 9; i++) {
+    const t = i / 10, px = fx + (x - fx) * t, py = fy + (y - fy) * t;
+    for (const s of Phys.S) if (s.w > 40 && s.h > 20 && !(s.w > A.w * 0.97) && px > s.x + 3 && px < s.x + s.w - 3 && py > s.y + 3 && py < s.y + s.h - 3) { n++; break; }
+  }
+  return n >= 2;
+}
+function steer(tx, ty, sp, acc, dt) {
+  const dx = tx - V.x, dy = ty - V.y, d = hyp(dx, dy) || 1, arrive = Math.min(1, d / (V.R * 2.2));
+  let ex = dx / d * sp * arrive - V.vx, ey = dy / d * sp * arrive - V.vy;
+  const el = hyp(ex, ey), m = acc * dt; if (el > m) { ex *= m / el; ey *= m / el; }
+  V.vx += ex; V.vy += ey; return d;
+}
+function dashDir(dx, dy, sp, dur) {
+  const d = hyp(dx, dy) || 1; V.vx = dx / d * sp; V.vy = dy / d * sp; V.dashT = dur; V.dashCd = 0.55 - 0.2 * G.diff;
+  V.dashAng = Math.atan2(dy, dx); Snd.play('dash'); Fx.emit(V.x, V.y, 5, { col: '#ff8896', kind: 'gel', spd: 90, size: 3, life: 0.35, grav: 0 });
+}
+function roomAt(x, y) { const p = V.R; return clamp(Math.min(x - p, A.w - p - x, y - p, A.h - p - y) / (V.R * 4), 0, 1); }
+function escapeDir(f, avoidSame) {
+  let best = null, bs = -9;
+  const ax = f ? V.x - f.x : 0, ay = f ? V.y - f.y : 0, al = hyp(ax, ay) || 1;
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * TAU, dx = Math.cos(a), dy = Math.sin(a), len = 170 * sizeK();
+    const ex = clamp(V.x + dx * len, V.R, A.w - V.R), ey = clamp(V.y + dy * len, V.R, A.h - V.R);
+    let s = (f ? 1.25 * (dx * ax + dy * ay) / al : 0) + 0.95 * roomAt(ex, ey) - dangerAt(ex, ey) + rnd(0, 0.4);
+    if (f && Evo.has('cover') && losBlocked(f.x, f.y, ex, ey)) s += 0.55;               // runs behind UI when it can
+    if (avoidSame && V.dashAng !== undefined && Math.cos(a - V.dashAng) > 0.88) s -= 0.45;   // do not repeat the same escape line
+    if (s > bs) { bs = s; best = [dx, dy]; }
+  }
+  return best || [0, -1];
+}
+function nearestOnRect(r, x, y) { return [clamp(x, r.x, r.x + r.w), clamp(y, r.y, r.y + r.h)]; }
+function approachPoint(it) {
+  const r = rectOf(it);
+  if (V.x > r.x && V.x < r.x + r.w && V.y > r.y && V.y < r.y + r.h) return [V.x, V.y];
+  return nearestOnRect(r, V.x, V.y);
+}
+const mouthPt = () => [V.x + Math.cos(V.face) * V.R * 0.72, V.y + Math.sin(V.face) * V.R * 0.72];
+function navCenter(tab) {
+  const b = $('.navb[data-tab="' + tab + '"]'); if (!b) return { x: A.w / 2, y: A.h - 30 };
+  const r = b.getBoundingClientRect(); return { x: r.left - A.left + r.width / 2, y: r.top - A.top + r.height / 2 };
+}
+const navAlive = (tab) => { const it = UI.byEl.get($('.navb[data-tab="' + tab + '"]')); return it && !it.dead; };
+function targetsLeft() { return UI.items.some((it) => itemShown(it) && it.kind !== 'hud' && (it.kind !== 'text' || textLeftReal(it.text) > 0)); }
+function chooseTarget() {
+  let best = null, bs = -9;
+  for (const it of UI.items) {
+    if (!itemShown(it)) continue;
+    let frac;
+    if (it.kind === 'text') { const tot = it.text.chars.filter((c) => !c.ws).length || 1, left = textLeftReal(it.text); if (!left) continue; frac = left / tot; }
+    else frac = it.integ / it.max;
+    const r = rectOf(it); if (r.w < 6 || r.h < 6) continue;
+    let v = it.w * (0.55 + 0.45 * (1 - frac)) - hyp(r.cx - V.x, r.cy - V.y) / hyp(A.w, A.h) * 0.7 - dangerAt(r.cx, r.cy) * 0.9 + rnd(0, 0.3);
+    const f = Input.finger(r.cx, r.cy); if (f && f.down && hyp(f.x - r.cx, f.y - r.cy) < 110) v -= 0.5;
+    if (it === V.target) v -= 0.35;
+    if (V.desperate && it.kind === 'text') v += 0.5;
+    if (it.kind === 'hud') v -= 0.2;
+    if (v > bs) { bs = v; best = it; }
+  }
+  return best;
+}
+function pickCover(f) {
+  let best = null, bs = -9; const R = V.R;
+  for (const s of Phys.S) {
+    if (s.w < 60 || s.h < 26 || s.w > A.w * 0.97 && s.h > A.h * 0.2) continue;
+    const opts = [[s.x + s.w * rnd(0.15, 0.85), s.y + R * 0.15], [s.x + s.w * rnd(0.15, 0.85), s.y + s.h - R * 0.15]];
+    if (s.h > R * 1.6) { opts.push([s.x + R * 0.15, s.y + s.h * rnd(0.2, 0.8)]); opts.push([s.x + s.w - R * 0.15, s.y + s.h * rnd(0.2, 0.8)]); }
+    for (const o of opts) {
+      if (o[0] < R || o[0] > A.w - R || o[1] < R || o[1] > A.h - R) continue;
+      let sc = -dangerAt(o[0], o[1]) * 0.9 - hyp(o[0] - V.x, o[1] - V.y) / hyp(A.w, A.h) * 0.6 + rnd(0, 0.35);
+      if (f) sc -= clamp(1 - hyp(o[0] - f.x, o[1] - f.y) / 260, 0, 1) * 0.9;
+      if (f && Evo.has('cover') && segBlockedBy(f.x, f.y, o[0], o[1], s)) sc += 0.9;     // the cover has to actually hide it from the finger
+      if (sc > bs) { bs = sc; best = { x: o[0], y: o[1] }; }
+    }
+  }
+  return best;
+}
+function segBlockedBy(fx, fy, x, y, s) {
+  for (let i = 1; i <= 9; i++) { const t = i / 10, px = fx + (x - fx) * t, py = fy + (y - fy) * t; if (px > s.x - 2 && px < s.x + s.w + 2 && py > s.y - 2 && py < s.y + s.h + 2) return true; }
+  return false;
+}
+function quietSpot(f) {
+  let best = null, bs = -9;
+  for (let i = 0; i < 9; i++) {
+    const x = rnd(V.R * 1.3, A.w - V.R * 1.3), y = rnd(V.R * 1.3, A.h - V.R * 1.3);
+    let s = -dangerAt(x, y) - hyp(x - V.x, y - V.y) / hyp(A.w, A.h) * 0.3 + rnd(0, 0.3);
+    if (f) s += clamp(hyp(x - f.x, y - f.y) / 420, 0, 1);
+    if (s > bs) { bs = s; best = { x, y }; }
+  }
+  return best;
+}
+
+const AI = {
+  hitLog: [], dsub: 'charge', dsubT: 0, juke: null, diffT: 0, munchT: 6, recentSides: [], visited: [], ban: {}, failLog: [], wdCd: 0,
+
+  /* ---------- state machine ---------- */
+  setState(s) {
+    if (V.state === s && s !== 'taunt') return;
+    this.leave(V.state);
+    V.prev.push(V.state); if (V.prev.length > 5) V.prev.shift();
+    V.state = s; V.stT = 0; this.enter(s);
+  },
+  leave(s) {
+    if (s === 'hide') V.back = false;
+    if (s === 'grabbed') V.lure = 0;
+    if (s === 'attack') { V.mouth = 0; V.forceBite = 0; }
+    if (s === 'taunt') V.taunt = 0;
+    if (s === 'migrate' && V.mig) { $$('.navb.sq').forEach((b) => b.classList.remove('sq')); }
+  },
+  enter(s) {
+    const f = Input.finger(V.x, V.y);
+    switch (s) {
+      case 'idle':
+        V.stDur = rnd(1.0, 2.4); V.tx = V.x + rnd(-40, 40); V.ty = V.y + rnd(-30, 30);
+        if (f && Evo.has('bait') && Math.random() < 0.38 * (0.5 + G.diff)) V.feint = rnd(1.4, 2.4);           // pretend to be frozen, bait the finger
+        break;
+      case 'explore': {
+        V.stDur = rnd(2, 4); let bs = -9;
+        for (let i = 0; i < 6; i++) {
+          const x = rnd(V.R, A.w - V.R), y = rnd(V.R, A.h - V.R); let sc = -dangerAt(x, y) + rnd(0, 0.5) + clamp(hyp(x - V.x, y - V.y) / 300, 0, 0.5);
+          if (Evo.has('visited')) for (const v of this.visited) if (hyp(v.x - x, v.y - y) < 90) sc -= 0.6;     // stop walking the same routes
+          if (sc > bs) { bs = sc; V.tx = x; V.ty = y; }
+        }
+        this.visited.push({ x: V.tx, y: V.ty }); if (this.visited.length > 6) this.visited.shift();
+        break;
+      }
+      case 'hunt': V.target = chooseTarget(); V.stDur = 7; if (!V.target) { V.state = 'explore'; this.enter('explore'); } break;
+      case 'attack': V.biteT = 0.2; V.bites = 0; V.biteMax = 2 + ((Math.random() * 4) | 0); V.stDur = 5.5; break;
+      case 'flee': { V.stDur = rnd(1.4, 2.4); const q = quietSpot(f); V.tx = q.x; V.ty = q.y; break; }
+      case 'hide': {
+        V.stDur = rnd(2.6, 5.2); const c = pickCover(f);
+        if (!c) { V.state = 'recover'; this.enter('recover'); return; }
+        V.spot = c; V.tx = c.x; V.ty = c.y; break;
+      }
+      case 'recover': { V.stDur = rnd(3, 6); const q = quietSpot(f); V.tx = q.x; V.ty = q.y; break; }
+      case 'taunt': V.stDur = rnd(0.9, 1.5); V.taunt = 1; V.wantTaunt = false; V.happy = 0.3; Snd.play('taunt'); break;
+      case 'desperate': V.stDur = 2.5; this.dsub = 'charge'; this.dsubT = 0; break;
+      case 'grabbed': V.stDur = 999; break;
+      case 'thrown': V.stDur = 3; break;
+      case 'stunned': V.stDur = 999; break;
+      case 'evolve': V.stDur = 3; break;
+      default: break;
+    }
+  },
+  think() {
+    const hp = V.hp / V.hpMax, calm = V.threat < 0.3, f = Input.finger(V.x, V.y), lrn = Evo.learn();
+    if (V.hp <= V.hpMax * 0.18 && !V.desperate) { V.desperate = true; this.setState('desperate'); return; }
+    if (V.desperate && V.hp > V.hpMax * 0.32) V.desperate = false;
+    const U = {};
+    const anyT = targetsLeft(), navOk = TABS.some((t) => t !== V.tab && navAlive(t));
+    U.explore = 0.42; U.idle = 0.2 + (hp < 0.5 ? 0.1 : 0) + (V.lvl <= 2 ? 0.15 : 0);
+    U.hunt = anyT ? (0.62 + 0.2 * (1 - hp * 0.4)) * (V.desperate ? 1.25 : 1) : 0;
+    U.recover = hp < 0.65 && calm && G.clock - G.lastHitT > 2.2 ? (1 - hp) * 1.15 : 0;
+    U.hide = (Evo.has('hide') ? 0.2 : 0.04) + (1 - hp) * 0.35 + (P.tapGap < 0.5 ? 0.2 * lrn : 0) + (f && f.down ? 0.1 : 0);
+    U.migrate = navOk && Evo.has('migDodge') ? 0.08 + (hp < 0.45 ? 0.55 : 0) + ((G.clock - (V.tabSince || 0)) > 28 ? 0.3 : 0) + (P.followN && P.followDelay > 4 ? 0.12 * lrn : 0) + (Evo.has('migDisadv') && hp < 0.6 ? 0.3 : 0) : 0;
+    U.taunt = V.wantTaunt && calm ? 1.3 : 0;
+    if (Evo.has('integrity')) { if (G.integ < 0.5) U.hunt *= 1.3; else U.hide *= 1.2; }            // adapts its plan to how wrecked the window is
+    if (Evo.has('risk')) { const rk = this.risk(f); U.hunt *= 1.2 - 0.5 * rk; U.hide *= 0.8 + 0.8 * rk; U.migrate *= 0.8 + rk; }
+    if (V.desperate) { U.idle = 0; U.hide = 0; U.recover = 0; U.explore *= 0.5; U.migrate *= 0.4; U.desperate = 0.95; }
+    let pickS = 'explore', best = -9;
+    for (const k in U) {
+      let u = U[k] * rnd(0.8, 1.2); const rep = V.prev.slice(-3).filter((p) => p === k).length; u -= 0.13 * rep;
+      if (k === V.state) u -= 0.15;
+      if (u > best) { best = u; pickS = k; }
+    }
+    if (pickS === 'migrate') this.startMigrate(); else this.setState(pickS);
+  },
+  risk(f) {                                          // 0 = safe to stand and fight, 1 = get out
+    let r = 0.3 * (1 - V.hp / V.hpMax);
+    if (f) { const d = hyp(f.x - V.x, f.y - V.y); r += clamp(1 - d / 250, 0, 1) * 0.35 + (f.down ? 0.15 : 0); }
+    if (this.cornered(f)) r += 0.15;
+    if (Combat.incoming()) r += 0.2;
+    if (V.stun > 0) r += 0.3;
+    return clamp(r, 0, 1);
+  },
+
+  /* ---------- threat sensing + dodging ---------- */
+  sense(dt) {
+    const f = Input.finger(V.x, V.y); V.fing = f;
+    V.restT = Math.max(0, V.restT - dt); this.wdCd = Math.max(0, this.wdCd - dt);
+    if (V.grab || V.stun > 0 || V.evoT > 0 || V.state === 'thrown') { V.threat = damp(V.threat, f ? 0.5 : 0, 6, dt); V.reactT = 0; return; }
+    if (this.lureCheck(dt)) return;
+    this.senseBodies();
+    if (!f) { V.threat = damp(V.threat, 0, 6, dt); V.reactT = 0; return; }
+    const dx = V.x - f.x, dy = V.y - f.y, d = hyp(dx, dy) || 1, dist = d - V.R, ux = dx / d, uy = dy / d, approach = f.vx * ux + f.vy * uy;
+    const TR = (150 + 90 * G.diff + V.R * 0.5) * Evo.p('range');
+    const aw = Evo.has('approach') ? 1 : 0.2;                               // a newborn barely notices a finger that is only approaching
+    let th = clamp(1 - dist / TR, 0, 1) * 0.6 + clamp(approach / 650, 0, 1) * 0.55 * aw;
+    if (Evo.has('predict')) {                                              // extrapolate the finger and move before it arrives
+      const px = f.x + f.vx * 0.34, py = f.y + f.vy * 0.34;
+      V.predict = { x: px, y: py };
+      if (hyp(px - V.x, py - V.y) - V.R < V.R * 1.1 && f.speed > 110) th += 0.4;
+    } else if (Evo.has('approach')) {
+      const px = f.x + f.vx * 0.2, py = f.y + f.vy * 0.2;
+      if (hyp(px - V.x, py - V.y) - V.R < V.R * 0.6 && f.speed > 140) th += 0.3;
+    }
+    if (!f.down) th *= 0.55;
+    th *= Learn.sideW(f);
+    V.threat = clamp(th, 0, 1);
+    const busy = ['evade', 'dodge', 'flee', 'migrate', 'stunned', 'grabbed', 'thrown', 'evolve'].includes(V.state);
+    if (V.threat > 0.42 && !busy && V.restT <= 0) {
+      V.reactT += dt;
+      let delay = lerp(0.24, 0.1, G.diff) + Evo.p('react') + (V.state === 'attack' && V.forceBite <= 0 ? 0.12 : 0) + (V.state === 'recover' ? 0.15 : 0) + (V.gripP > 0 ? 0.08 : 0);
+      delay *= 1 - 0.6 * Learn.counter(f.down && f.speed < 80 ? 'grab' : 'tap');                  // repeated habits get answered faster
+      if (V.reactT >= Math.max(0.05, delay)) { V.reactT = -0.15; this.onThreat(f, dist, approach); }
+    } else if (V.threat < 0.3) V.reactT = Math.min(V.reactT, 0);
+  },
+  /* level 5+: stand still while a grab charges, then slip away at the last moment */
+  lureCheck(dt) {
+    if (!Evo.has('bait') || V.baitCd > 0 || V.grab || V.stun > 0) { V.lure = 0; return false; }
+    let pin = null; for (const q of Input.ptrs.values()) if (q.down && q.mode === 'virus' && q.gripT > 0.06) pin = q;
+    if (!pin) { V.lure = 0; V.lureRoll = null; return false; }
+    if (V.lureRoll === null || V.lureRoll === undefined) V.lureRoll = Math.random() < 0.45 + 0.05 * V.lvl;
+    if (!V.lureRoll) return false;
+    V.lure = 1; V.vx *= Math.exp(-8 * dt); V.vy *= Math.exp(-8 * dt);
+    if (pin.gripT > 0.62 * Input.holdSec()) {
+      Input.breakGrip(pin); V.lureRoll = null; V.baitCd = 3.5;
+      const dx = V.x - pin.x, dy = V.y - pin.y, l = hyp(dx, dy) || 1, sd = Math.random() < 0.5 ? 1 : -1;
+      dashDir(-dy / l * sd + dx / l * 0.3, dx / l * sd + dy / l * 0.3, vmax() * 2.3, 0.28);
+      this.setState('dodge'); V.stDur = 0.5; V.restT = Evo.p('rest') + 0.2; V.dodge = { kind: 'side', t0: G.clock, hit: false, done: false };
+      V.startle = 0.2; Learn.rec('grab', false); this.noteBait = (this.noteBait || 0) + 1;
+    }
+    return true;
+  },
+  /* level 6+: step out of the way of a thrown object, but not every time */
+  senseBodies() {
+    if (!Evo.has('weaponDodge') || this.wdCd > 0 || V.restT > 0) return;
+    const inc = Combat.incoming(); if (!inc) return;
+    this.wdCd = 0.9;
+    if (Math.random() > 0.3 + 0.06 * V.lvl) return;
+    const b = inc.b, sp = hyp(b.vx, b.vy) || 1, px = -b.vy / sp, py = b.vx / sp, sd = ((V.x - b.x) * px + (V.y - b.y) * py) >= 0 ? 1 : -1;
+    dashDir(px * sd, py * sd, vmax() * 2.2, 0.26); this.setState('dodge'); V.stDur = 0.4; V.restT = Evo.p('rest') * 0.8;
+    V.dodge = { kind: 'side', t0: G.clock, hit: false, done: false };
+  },
+  cornered(f) {
+    const p = V.R * 1.6, nearX = V.x < p || V.x > A.w - p, nearY = V.y < p || V.y > A.h - p;
+    let free = 0;
+    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU, ex = V.x + Math.cos(a) * V.R * 3, ey = V.y + Math.sin(a) * V.R * 3; if (ex > V.R && ex < A.w - V.R && ey > V.R && ey < A.h - V.R && (!f || (ex - f.x) * (V.x - f.x) + (ey - f.y) * (V.y - f.y) > 0)) free++; }
+    return (nearX && nearY) || free <= 2;
+  },
+  pickDodge(f, dist) {
+    const w = {}, lrn = Evo.learn(), rate = (k) => Math.pow((P.dodge[k][1] + 1) / (P.dodge[k][0] + 2), 1.4 * lrn);
+    const speedy = f.speed > 220, covers = Phys.S.length > 1, navOk = TABS.some((t) => t !== V.tab && navAlive(t));
+    w.dash = 1.0;
+    w.side = Evo.has('side') ? (speedy ? 1.1 : 0.25) : 0;
+    w.juke = Evo.has('juke') ? (dist > 80 ? 0.45 + P.dragRatio * 1.7 * lrn : 0.1) : 0;
+    w.hide = Evo.has('hide') && covers && V.state !== 'hide' ? 0.35 + (P.tapGap < 0.5 ? 0.45 * lrn : 0) : 0;
+    w.migrate = navOk && Evo.has('migDodge') ? 0.08 + (V.hp < V.hpMax * 0.45 ? 0.9 : 0) + (this.cornered(f) ? 0.35 : 0) + (Evo.has('migDisadv') && V.hp < V.hpMax * 0.6 ? 0.5 : 0) : 0;
+    if (Evo.has('counter')) {                                                // answer whatever the player keeps doing
+      const ct = Learn.counter('tap'), cg = Learn.counter('grab'), cw = Math.max(Learn.counter('weapon'), Learn.counter('pull'));
+      w.side *= 1 + 1.2 * ct; w.hide *= 1 + 1.0 * ct;
+      w.juke *= 1 - 0.7 * cg; w.dash *= 1 + 0.8 * cg; w.migrate *= 1 + 0.8 * cg;
+      w.side *= 1 + 1.0 * cw;
+    }
+    if (Evo.has('chain') && V.dodgeLast === 'juke') w.migrate += 0.5;        // fake, then leave the tab
+    if (Evo.has('integrity') && G.integ < 0.5) { w.hide *= 0.6; w.dash *= 1.2; }
+    if (V.dashCd > 0) { w.dash *= 0.3; w.side *= 0.3; w.juke *= 0.3; }
+    let tot = 0; const ks = Object.keys(w);
+    ks.forEach((k) => {
+      w[k] *= rate(k) * (k === V.dodgeLast ? 0.55 : 1);
+      if (Evo.has('risk') && (this.ban[k] || 0) > G.clock) w[k] = 0;        // a plan that just failed twice is dropped for a while
+      tot += w[k];
+    });
+    if (Math.random() < 0.12 || tot <= 0) return pick(ks.filter((k) => w[k] > 0 || k === 'dash').concat(['dash']));
+    let r = Math.random() * tot; for (const k of ks) { r -= w[k]; if (r <= 0) return k; }
+    return 'dash';
+  },
+  noteFail(kind) {
+    this.failLog = this.failLog.filter((e) => G.clock - e.t < 10); this.failLog.push({ k: kind, t: G.clock });
+    if (this.failLog.filter((e) => e.k === kind).length >= 2) this.ban[kind] = G.clock + 8;
+  },
+  onThreat(f, dist) {
+    if (V.state === 'attack' && V.forceBite <= 0 && Math.random() > 0.55 + 0.35 * G.diff) return;        // too busy chewing to notice
+    if (V.state === 'recover') V.startle = 0.4;
+    if (Evo.has('risk')) {
+      const rk = this.risk(f);
+      if (rk < 0.2 && !f.down && f.speed < 200) return;                                                   // calm: it stands its ground
+      if (Evo.has('pulse') && V.pulseCd <= 0 && f.down && dist < V.R * 2.2 && rk > 0.45) { this.pulse(f); return; }
+    }
+    if (this.cornered(f) && Evo.has('approach') && Math.random() < 0.55) {                               // cornered: eat a piece of UI to open a path
+      const near = UI.items.filter((it) => itemShown(it) && it.kind !== 'hud' && it.kind !== 'text' && (() => { const r = rectOf(it); return hyp(r.cx - V.x, r.cy - V.y) < V.R * 4.5; })());
+      if (near.length) { V.target = pick(near); V.forceBite = 1.3; V.biteMax = 3; this.setState('attack'); V.forceBite = 1.3; return; }
+    }
+    const kind = this.pickDodge(f, dist);
+    this.doDodge(kind, f);
+  },
+  /* level 10: a shock wave that throws loose objects away and knocks weapons out of the player's hand */
+  pulse(f) {
+    V.pulseCd = 6.5; const R = V.R * 6;
+    Fx.ring(V.x, V.y, '#ffd24a', R); Fx.ring(V.x, V.y, '#ffffff', R * 0.6); Snd.play('pulse'); G.shake = Math.max(G.shake, 7 * QL[G.qLevel].shake);
+    for (const b of Phys.B) {
+      if (b.tab !== G.tab || b.dying) continue;
+      const dx = b.x - V.x, dy = b.y - V.y, d = hyp(dx, dy) || 1; if (d > R) continue;
+      const k = 1 - d / R; b.asleep = false; b.st = 0;
+      if (b.held && d < R * 0.85) { const hp = b.held.p; Phys.drop(b, dx / d * 700, dy / d * 700); if (hp) hp.body = null; }
+      else { b.vx += dx / d * 1100 * k; b.vy += dy / d * 1100 * k - 150 * k; b.va += rnd(-8, 8) * k; }
+    }
+    UIFx.near(V.x, V.y, 0.9, null, 0, 0);
+    if (f) { const dx = V.x - f.x, dy = V.y - f.y, l = hyp(dx, dy) || 1; dashDir(dx / l, dy / l, vmax() * 2, 0.25); }
+    this.setState('evade'); V.stDur = 0.5; V.restT = Evo.p('rest') + 0.2;
+  },
+  doDodge(kind, f) {
+    V.dodgeRep = kind === V.dodgeLast ? (V.dodgeRep || 0) + 1 : 0; V.dodgeLast = kind;
+    V.dodge = { kind, t0: G.clock, hit: false, done: false };
+    V.restT = Evo.p('rest') + 0.35;                                          // after any dodge it is open for a moment
+    const sp = vmax() * 2.1;
+    if (kind === 'dash') {
+      const d = escapeDir(f, true); dashDir(d[0], d[1], sp, 0.3); this.setState('evade'); V.stDur = rnd(0.45, 0.7);
+      if (Evo.has('midturn') && Math.random() < 0.55) V.turn = { t: 0.13, side: Math.random() < 0.5 ? 1 : -1 };   // changes direction mid-dash
+      if (f && Phys.looseNear(V.x, V.y, 130) && Math.random() < 0.5) {
+        const dx = f.x - V.x, dy = f.y - V.y, l = hyp(dx, dy) || 1; Phys.flick(V.x, V.y, 130, dx / l, dy / l, 300);
+      }
+    } else if (kind === 'side') {
+      const vx = f.vx, vy = f.vy, l = hyp(vx, vy) || 1; let px = -vy / l, py = vx / l;
+      if (l < 1) { px = -(f.y - V.y); py = f.x - V.x; const q = hyp(px, py) || 1; px /= q; py /= q; }
+      const a = roomAt(V.x + px * 120, V.y + py * 120) - roomAt(V.x - px * 120, V.y - py * 120);
+      let side = a >= 0 ? 1 : -1; if (this.recentSides.slice(-2).every((s) => s === side)) side = -side;
+      this.recentSides.push(side); if (this.recentSides.length > 4) this.recentSides.shift();
+      dashDir(px * side, py * side, sp * 0.9, 0.24); this.setState('dodge'); V.stDur = rnd(0.4, 0.6);
+    } else if (kind === 'juke') {
+      this.setState('dodge'); V.stDur = 0.9; this.juke = { phase: f && hyp(f.x - V.x, f.y - V.y) > 110 ? 0 : 1, t: 0, side: Math.random() < 0.5 ? 1 : -1, f };
+    } else if (kind === 'hide') {
+      this.setState('hide');
+    } else if (kind === 'migrate') {
+      this.startMigrate();
+    }
+  },
+  trackDodge() {
+    const d = V.dodge; if (!d || d.done) return;
+    if (G.clock - d.t0 > 0.95) {
+      d.done = true; const rec = P.dodge[d.kind]; if (rec) { rec[0]++; rec[1]++; } G.stats.dodges++; P.samples++;
+      Evo.gain('dodge', 1);
+      if (Math.random() < 0.22 + 0.3 * G.diff + 0.08 * Math.min(4, Input.missRun)) V.wantTaunt = true;
+    }
+  },
+
+  /* ---------- damage ---------- */
+  hitTest(px, py, fspeed, grabSlop) {
+    if (!V.alive || V.dying > 0 || V.hidden || V.tab !== G.tab || (V.mig && V.mig.phase === 'suck')) return null;
+    if (V.back) { for (const s of Phys.S) if (px > s.x && px < s.x + s.w && py > s.y && py < s.y + s.h) return null; }   // covered part is safe
+    let best = -1e9;
+    for (const c of Virus.colliders()) best = Math.max(best, c.r - hyp(px - c.x, py - c.y));
+    const slop = grabSlop ? Math.min(grabSlop, V.R * 0.8) : 11 + Math.min(10, fspeed / 90);   // the grab area is only a little bigger than the body
+    if (best < -slop) return null;
+    return { depth: clamp(best / V.R, 0, 1), near: best };
+  },
+  nearMiss(px, py) {
+    let best = -1e9; for (const c of Virus.colliders()) best = Math.max(best, c.r - hyp(px - c.x, py - c.y));
+    return best > -V.R * 1.7 && best < -8;
+  },
+  onHit(h, px, py, kind) {
+    const comboK = 1 + 0.12 * Math.min(5, V.combo);
+    let dmg = (kind === 'scratch' ? 1.1 : 6.2) * (0.45 + 0.55 * h.depth) * comboK;
+    if (V.stun > 0) dmg *= 1.35;
+    if (V.state === 'attack' || V.state === 'recover') dmg *= 1.3;
+    if (V.state === 'taunt') dmg *= 1.25;
+    dmg = Math.max(0.4, dmg);
+    V.hp = Math.max(0, V.hp - dmg); G.lastHitT = G.clock;
+    if (kind === 'tap') {
+      G.stats.hits++; V.combo++; V.comboT = 2.4; G.score += Math.round(10 * (0.5 + h.depth) * (1 + 0.5 * (V.combo - 1))); if (V.combo >= 3) Combat.showCombo('TAP COMBO', Math.round(10 * (0.5 + h.depth) * (1 + 0.5 * (V.combo - 1)))); V.hurt = 0.35; V.startle = 0.25; V.missStreak = 0; Input.missRun = 0;
+      const dx = V.x - px, dy = V.y - py, d = hyp(dx, dy) || 1;
+      V.vx += dx / d * 160; V.vy += dy / d * 160; Virus.impact(dx / d, dy / d, 380); Virus.jolt(160);
+      Snd.play('hit'); Snd.play('hurt'); Fx.emit(px, py, 9, { col: '#ff6b7a', kind: 'gel', spd: 230, size: 3.5, life: 0.5 });
+      G.shake = Math.max(G.shake, 3 * QL[G.qLevel].shake);
+      this.hitLog.push(G.clock); P.hitRate = ema(P.hitRate, 1, 0.12); P.samples++;
+      if (V.dodge && !V.dodge.done) { V.dodge.hit = true; V.dodge.done = true; if (P.dodge[V.dodge.kind]) P.dodge[V.dodge.kind][0]++; this.noteFail(V.dodge.kind); }
+      if (this.cornered(V.fing)) heatAdd(P.trap, V.x, V.y, 1.2);
+    } else if (kind === 'scratch') { V.hurt = Math.max(V.hurt, 0.12); Fx.emit(px, py, 1, { col: '#ff6b7a', kind: 'gel', spd: 90, size: 2.5, life: 0.35 }); }
+    if (V.hp <= 0) { this.die(); return; }
+    if (kind === 'tap') {
+      V.reactT = 0; this.sensed = 0;
+      if (V.stun <= 0 && V.restT <= 0 && Math.random() < 0.35 + 0.065 * V.lvl && (V.state === 'attack' || V.state === 'idle' || V.state === 'explore' || V.state === 'hunt' || V.state === 'recover' || V.state === 'taunt' || V.state === 'hide')) {
+        const f = V.fing || { x: px, y: py, vx: 0, vy: 0, speed: 0, down: true };
+        if (V.hp < V.hpMax * 0.4 && Evo.has('migDodge') && Math.random() < 0.5 && TABS.some((t) => t !== V.tab && navAlive(t))) this.startMigrate();
+        else this.doDodge(this.pickDodge(f, 60), f);
+      }
+    }
+  },
+  die() {
+    V.hp = 0; V.dying = 0.9; V.state = 'dead'; Combat.forceDrop(); V.stun = 0; V.proj = 0; V.back = false; V.suck = 0;
+    P.games++; P.samples += 3; profSave(); Snd.play('hurt');
+  },
+
+  /* ---------- per-frame ---------- */
+  update(dt) {
+    if (!V.alive) return;
+    if (V.dying > 0) { V.vx *= 0.9; V.vy *= 0.9; Virus.integrate(dt); return; }
+    if (V.grab) V.comboT = Math.max(V.comboT, 0.9);
+    V.comboT -= dt; if (V.comboT <= 0) V.combo = 0;
+    V.dashT = Math.max(0, V.dashT - dt); V.dashCd = Math.max(0, V.dashCd - dt); V.grabCd = Math.max(0, V.grabCd - dt); V.forceBite = Math.max(0, V.forceBite - dt);
+    V.suckT = Math.max(0, (V.suckT || 0) - dt);
+    V.stun = Math.max(0, V.stun - dt); V.brace = Math.max(0, V.brace - dt); V.baitCd = Math.max(0, V.baitCd - dt); V.pulseCd = Math.max(0, V.pulseCd - dt); V.exhaust = Math.max(0, V.exhaust - dt);
+    if (!V.grab && V.proj > 0) { V.proj -= dt; if (G.clock - V.thrownAt > 0.35 && hyp(V.vx, V.vy) < 140 * sizeK()) V.proj -= dt * 4; }
+    if (V.gripP > 0 && !V.grab) { const k = Math.exp(-3.2 * V.gripP * dt); V.vx *= k; V.vy *= k; }      // a finger pinning it down slows it
+    Evo.update(dt);
+    this.diffT -= dt;
+    if (this.diffT <= 0) {
+      this.diffT = 1; while (this.hitLog.length && G.clock - this.hitLog[0] > 20) this.hitLog.shift();
+      const tgt = clamp(0.08 + 0.075 * (V.lvl - 1) + clamp(this.hitLog.length / 6, 0, 1) * 0.2, 0, 0.9);
+      G.diff = damp(G.diff, tgt, 0.5, 1);
+      for (let i = 0; i < P.heat.length; i++) { P.heat[i] *= 0.9985; P.trap[i] *= 0.9985; }
+    }
+    if (V.hidden && V.tab === G.tab) this.emerge();
+    if (V.hidden || V.tab !== G.tab) { this.offscreen(dt); return; }
+    if (V.emerge > 0) { V.emerge -= dt; V.sc = lerp(0.15, 1, 1 - clamp(V.emerge / 0.5, 0, 1)); } else if (!V.mig) V.sc = damp(V.sc, 1, 12, dt);
+    V.stT += dt; this.trackDodge();
+    this.sense(dt);
+    if (V.evoT > 0) { V.vx *= Math.exp(-5 * dt); V.vy *= Math.exp(-5 * dt); }
+    else if (V.grab) this.grabbed(dt);
+    else if (V.stun > 0 || V.state === 'stunned') this.tickStun(dt);
+    else if (V.state === 'thrown') this.tickThrown(dt);
+    else this.tick(dt);
+    this.feed(dt);
+    // gaze and mouth direction
+    const f = V.fing, fav = Learn.favSide(), tx = f && V.threat > 0.15 ? f.x : V.target && V.state !== 'idle' ? rectOf(V.target).cx : V.x + V.vx, ty = f && V.threat > 0.15 ? f.y : V.target && V.state !== 'idle' ? rectOf(V.target).cy : V.y + V.vy;
+    let lx = tx - V.x, ly = ty - V.y; if (!f && fav >= 0 && Evo.has('memory') && hyp(V.vx, V.vy) < 40) { lx = [-1, 1, 0, 0][fav] * 50; ly = [0, 0, -1, 1][fav] * 50; }   // watches the side you usually grab from
+    const ll = hyp(lx, ly);
+    if (ll > 4) { V.look.x = damp(V.look.x, lx / ll, 9, dt); V.look.y = damp(V.look.y, ly / ll, 9, dt); V.face = V.face + angDiff(V.face, Math.atan2(ly, lx)) * Math.min(1, 8 * dt); }
+    V.chew += dt;
+    Virus.integrate(dt);
+    if (V.back && V.state !== 'hide') V.back = false;
+    if ((V.state === 'idle' || V.state === 'explore') && V.hp < V.hpMax * 0.6) V.hp = Math.min(V.hpMax * 0.6, V.hp + 0.6 * dt);
+  },
+  tickStun(dt) {
+    V.vx *= Math.exp(-1.5 * dt);
+    if (V.stun <= 0 && V.state === 'stunned') { V.restT = Math.max(V.restT, 0.2); this.setState(V.lvl >= 7 ? 'flee' : 'recover'); }
+  },
+  tickThrown(dt) {
+    if (Evo.has('predict') && V.proj > 0) {                                 // air control: steer away from a wall it is about to hit
+      const fx = V.x + V.vx * 0.28, fy = V.y + V.vy * 0.28, m = V.R * 1.2; let ax = 0, ay = 0;
+      if (fx < m) ax = 1; else if (fx > A.w - m) ax = -1; if (fy < m) ay = 1; else if (fy > A.h - m) ay = -1;
+      const k = (0.4 + 0.6 * Learn.wallRatio()) * Evo.learn() * Evo.p('spd');
+      V.vx += ax * 1400 * k * dt; V.vy += ay * 1400 * k * dt;
+    }
+    if (V.proj <= 0 || (G.clock - V.thrownAt > 0.5 && hyp(V.vx, V.vy) < 160)) {
+      V.proj = 0; V.restT = Math.max(V.restT, 0.15);
+      if (V.stun > 0) this.setState('stunned'); else this.setState(V.hp < V.hpMax * 0.5 && V.lvl >= 4 ? 'flee' : 'recover');
+    }
+  },
+  tick(dt) {
+    const vm = vmax(), f = V.fing;
+    switch (V.state) {
+      case 'idle':
+        if (V.feint > 0) {
+          V.vx *= Math.exp(-6 * dt); V.vy *= Math.exp(-6 * dt);
+          if (f && hyp(f.x - V.x, f.y - V.y) - V.R < 90) { V.feint = 0; this.doDodge('side', f); }                    // ambush: pounce away at the last second
+        } else {
+          if (V.stT % 0.9 < dt) { V.tx = V.x + rnd(-45, 45); V.ty = V.y + rnd(-35, 35); }
+          steer(V.tx, V.ty, 26 * sizeK(), 160, dt);
+        }
+        if (V.stT > V.stDur) this.think();
+        break;
+      case 'explore': {
+        const d = steer(V.tx, V.ty, vm * 0.55, 260, dt);
+        if (d < V.R * 1.2 || V.stT > V.stDur) this.think();
+        else if (Math.random() < dt * 0.6 && targetsLeft() && V.stT > 1) { const t = chooseTarget(); if (t) { const r = rectOf(t); if (hyp(r.cx - V.x, r.cy - V.y) < 160) { this.setState('hunt'); } } }
+        break;
+      }
+      case 'hunt': {
+        if (!V.target || V.target.dead || !itemShown(V.target)) { this.think(); break; }
+        const [ax, ay] = approachPoint(V.target), d = steer(ax, ay, vm * 0.9, 340, dt);
+        if (d < V.R * 0.95 || (d < V.R * 1.6 && hyp(V.vx, V.vy) < 40)) this.setState('attack');
+        else if (V.stT > V.stDur) this.think();
+        break;
+      }
+      case 'attack': this.tickAttack(dt); break;
+      case 'evade': case 'dodge': this.tickDodge(dt); break;
+      case 'flee': {
+        const d = steer(V.tx, V.ty, vm * 1.2, 520, dt);
+        if (f && V.threat > 0.5 && d < V.R * 2) { const q = quietSpot(f); V.tx = q.x; V.ty = q.y; }
+        if (V.stT > V.stDur || (d < V.R && V.threat < 0.2)) this.think();
+        break;
+      }
+      case 'hide': {
+        const s = V.spot; if (!s) { this.think(); break; }
+        const d = steer(s.x, s.y, vm * 1.1, 520, dt);
+        if (d < 6) { V.vx *= 0.3; V.vy *= 0.3; V.back = true; V.hp = Math.min(V.hpMax * 0.8, V.hp + 1.1 * dt); } else V.back = false;
+        if (V.back && V.stT > V.stDur) { V.back = false; if (V.target && !V.target.dead && Math.random() < 0.6) { this.setState('hunt'); } else this.think(); }
+        else if (!V.back && V.stT > V.stDur + 3) this.think();
+        break;
+      }
+      case 'recover': {
+        const d = steer(V.tx, V.ty, vm * 0.5, 220, dt);
+        if (d < V.R) { V.vx *= 0.85; V.vy *= 0.85; V.hp = Math.min(V.hpMax * 0.8, V.hp + 3.2 * dt); }
+        if (V.stT > V.stDur || V.hp >= V.hpMax * 0.8) this.think();
+        break;
+      }
+      case 'taunt':
+        V.vx = damp(V.vx, Math.sin(G.clock * 14) * 45, 8, dt); V.vy = damp(V.vy, Math.cos(G.clock * 11) * 30, 8, dt);
+        if (V.stT > V.stDur) this.think();
+        break;
+      case 'desperate': this.tickDesperate(dt); break;
+      case 'migrate': this.tickMigrate(dt); break;
+      default: break;
+    }
+  },
+  tickAttack(dt) {
+    const it = V.target;
+    if (!it || it.dead || !itemShown(it)) { V.mouth = damp(V.mouth, 0, 8, dt); this.afterBite(); return; }
+    const [ax, ay] = approachPoint(it), d = hyp(ax - V.x, ay - V.y);
+    if (d > V.R * 1.05) steer(ax, ay, vmax() * 0.9, 380, dt); else { V.vx *= Math.exp(-7 * dt); V.vy *= Math.exp(-7 * dt); }
+    V.mouth = damp(V.mouth, 0.45 + 0.5 * Math.abs(Math.sin(V.chew * 14)), 14, dt);
+    V.biteT -= dt;
+    if (V.biteT <= 0 && d < V.R * 1.2) {
+      V.biteT = (0.38 - 0.12 * G.diff) * (V.forceBite > 0 ? 0.5 : 1); V.bites++;
+      const [bx, by] = approachPoint(it);
+      V.face = Math.atan2(by - V.y, bx - V.x);
+      biteItem(it, bx, by);
+      if (it.dead) { V.grow = Math.min(0.28, V.grow + 0.05); V.happy = 0.5; }
+      if (it.kind === 'text' && V.bites >= 2) V.suckT = 0.9;
+      if (V.bites >= V.biteMax || it.dead) this.afterBite();
+    }
+    if (V.stT > V.stDur) this.afterBite();
+  },
+  afterBite() {
+    const near = Phys.looseNear(V.x, V.y, V.R * 4.5);
+    if (near > 1 && Math.random() < 0.6) { V.suckT = 1.2; V.suckHold = 1.2; }
+    if (V.forceBite > 0) { V.forceBite = 0; const f = V.fing, d = escapeDir(f, true); dashDir(d[0], d[1], vmax() * 2.1, 0.3); this.setState('evade'); V.stDur = 0.6; return; }
+    const r = Math.random();
+    if (r < 0.35 && targetsLeft()) { V.target = chooseTarget(); if (V.target) { this.setState('hunt'); return; } }
+    if (r < 0.55) { this.think(); return; }
+    this.setState(V.hp < V.hpMax * 0.5 && r < 0.75 ? 'hide' : 'explore');       // sometimes eats only a few pieces, then slips away
+  },
+  tickDodge(dt) {
+    if (V.turn) {
+      V.turn.t -= dt;
+      if (V.dashT <= 0) V.turn = null;
+      else if (V.turn.t <= 0) { const an = V.turn.side * rnd(0.7, 1.1), c = Math.cos(an), sn = Math.sin(an), vx = V.vx, vy = V.vy; V.vx = vx * c - vy * sn; V.vy = vx * sn + vy * c; V.dashAng = (V.dashAng || 0) + an; V.turn = null; Fx.emit(V.x, V.y, 4, { col: '#ff8896', kind: 'gel', spd: 80, size: 3, life: 0.3, grav: 0 }); }
+    }
+    if (this.juke && V.state === 'dodge') {
+      const j = this.juke; j.t += dt;
+      if (j.phase === 0) {
+        const f = V.fing || j.f; steer(f.x, f.y, vmax() * 0.65, 600, dt);                                  // walks toward the finger as bait
+        if (j.t > 0.28 || hyp(f.x - V.x, f.y - V.y) < 100) { j.phase = 1; j.t = 0; }
+      } else if (j.phase === 1) {
+        const f = V.fing || j.f, dx = V.x - f.x, dy = V.y - f.y, l = hyp(dx, dy) || 1;
+        dashDir(-dy / l * j.side + dx / l * 0.35, dx / l * j.side + dy / l * 0.35, vmax() * 2.2, 0.26); j.phase = 2; j.t = 0;
+      }
+      if (j.phase === 2 && j.t > 0.5) this.juke = null;
+    } else if (V.dashT <= 0) { V.vx *= Math.exp(-3 * dt); V.vy *= Math.exp(-3 * dt); }
+    if (V.stT > V.stDur && !this.juke) { this.juke = null; if (V.hp < V.hpMax * 0.35 && Math.random() < 0.5) this.setState('flee'); else this.think(); }
+  },
+  tickDesperate(dt) {
+    this.dsubT -= dt; const f = V.fing, vm = vmax() * 1.25;
+    if (this.dsubT <= 0) { this.dsubT = rnd(0.9, 1.6); this.dsub = f && f.down && Math.random() < 0.55 ? 'charge' : 'frenzy'; }
+    if (this.dsub === 'charge' && f) {
+      const d = steer(f.x, f.y, vm, 620, dt);                                         // runs at the finger, veers away at the last moment
+      if (d < 95 && V.dashCd <= 0) { const dx = V.x - f.x, dy = V.y - f.y, l = hyp(dx, dy) || 1, s = Math.random() < 0.5 ? 1 : -1; dashDir(-dy / l * s, dx / l * s, vmax() * 2.3, 0.28); this.dsubT = 0.5; this.dsub = 'frenzy'; }
+    } else {
+      const lt = Phys.nearestLetter(V.x, V.y, 400);
+      if (lt) { const d = steer(lt.x, lt.y, vm, 560, dt); if (d < V.R * 3) V.suckT = 0.6; }
+      else {
+        if (!V.target || V.target.dead || !itemShown(V.target)) V.target = chooseTarget();
+        if (V.target) {
+          const [ax, ay] = approachPoint(V.target), d = steer(ax, ay, vm, 560, dt);
+          if (d < V.R * 1.1) { V.biteT -= dt; V.mouth = damp(V.mouth, 0.9, 12, dt); if (V.biteT <= 0) { V.biteT = 0.2; biteItem(V.target, ax, ay); if (V.target.kind === 'text') V.suckT = 0.6; } }
+        }
+      }
+    }
+    if (V.hp > 32) { V.desperate = false; this.think(); }
+  },
+  feed(dt) {
+    if (V.suckT > 0) {
+      V.suck = 1; const q = V.desperate ? 1.6 : 1, m = mouthPt();
+      Phys.suck(m[0], m[1], V.R * 3.6, 1800 * q, dt, V.R * 0.8, (b) => {
+        swallowLetter(b); V.hp = Math.min(V.hpMax, V.hp + 0.5); V.grow = Math.min(0.28, V.grow + 0.022); V.happy = 0.4; V.energy++;
+        Snd.play('swallow'); Fx.emit(V.x, V.y, 2, { col: '#ffd0d6', kind: 'pix', spd: 80, size: 3, life: 0.3, grav: 0 });
+      });
+      V.mouth = Math.max(V.mouth, 0.5 + 0.3 * Math.sin(V.chew * 16));
+    } else V.suck = 0;
+    if (V.state !== 'attack' && V.state !== 'desperate' && V.suck === 0) V.mouth = damp(V.mouth, 0, 10, dt);
+  },
+  /* ---------- being held: spring joint, struggling, real escape checks ---------- */
+  grabbed(dt) {
+    const g = V.grab, p = Input.ptrs.get(g.id);
+    if (!p || !p.down) { Combat.release(p || null); return; }
+    const L = V.lvl;
+    g.t += dt;
+    const dx = p.x - V.x, dy = p.y - V.y, dist = hyp(dx, dy) || 1, stretch = clamp((dist - V.R * 0.6) / (V.R * 3), 0, 1);
+    let ax = dx * 190 - V.vx * 13, ay = dy * 190 - V.vy * 13;                    // elastic joint, not a rigid lock
+    g.burstT -= dt;
+    if (!g.burst && g.burstT <= 0 && V.stun <= 0 && V.exhaust <= 0) g.burst = this.newBurst();
+    if (g.burst) {
+      const b = g.burst; b.t += dt; const fo = this.burstForce(b, p, dx, dy, dist); ax += fo[0]; ay += fo[1];
+      if (Math.random() < dt * 20) Virus.jolt(40 + 10 * L);
+      if (b.t >= b.dur) { g.burst = null; g.burstT = rnd(0.5, 1.1) * (1.15 - 0.05 * L); }
+    }
+    V.vx += ax * dt; V.vy += ay * dt;
+    if (V.stun <= 0 && V.exhaust <= 0) V.esc += dt * Evo.p('escRate') * (1 + 0.8 * stretch + (g.burst ? 0.5 : 0) + (g.burst && g.burst.kind === 'shrink' ? 0.6 : 0)) * (1 + Learn.counter('grab') * 0.9);
+    V.esc = clamp(V.esc, 0, 1.2);
+    V.startle = 0.1; V.hurt = Math.max(V.hurt, 0.05);
+    g.acc += dt; if (g.acc > 0.25) { g.acc = 0; V.hp = Math.max(0, V.hp - 0.25); G.lastHitT = G.clock; if (V.hp <= 0) { this.die(); return; } }
+    if (V.esc >= 1 && V.stun <= 0) this.tryEscape(p, stretch);
+  },
+  newBurst() {
+    const L = V.lvl, kinds = ['twist']; if (L >= 3) kinds.push('jerk'); if (L >= 4) kinds.push('pull'); if (Evo.has('escMulti')) kinds.push('flip'); if (L >= 9) kinds.push('shrink');
+    let tot = 0; const w = kinds.map((k) => { const r = P.esc[k] || [0, 0]; const v = 0.4 + (r[1] + 1) / (r[0] + 2) * Evo.learn(); tot += v; return v; });   // favors what has worked before
+    let r = Math.random() * tot, kind = kinds[0]; for (let i = 0; i < kinds.length; i++) { r -= w[i]; if (r <= 0) { kind = kinds[i]; break; } }
+    return { kind, t: 0, dur: rnd(0.45, 0.8), dir: rnd(0, TAU), S: 1100 + 140 * L };
+  },
+  burstForce(b, p, dx, dy, dist) {
+    const ux = -dx / dist, uy = -dy / dist, S = b.S;                           // u points from the finger to the virus
+    switch (b.kind) {
+      case 'twist': { const m = Math.sin(b.t * 26) * S; return [-uy * m, ux * m]; }
+      case 'jerk': { const m = Math.sin(b.t * 20) > 0 ? S * 1.3 : 0; return [Math.cos(b.dir) * m, Math.sin(b.dir) * m]; }
+      case 'pull': return [ux * S * 1.1, uy * S * 1.1];
+      case 'flip': { const sp = p.speed || 0, k = sp > 200 ? 1 : 0.3, l = sp || 1; V.rotV += (Math.random() < 0.5 ? -1 : 1) * 14 * 0.016; return [-p.vx / l * S * 1.6 * k, -p.vy / l * S * 1.6 * k]; }   // uses the player's own swing against them
+      default: return [ux * S * 0.4, uy * S * 0.4];
+    }
+  },
+  tryEscape(p, stretch) {
+    const g = V.grab, L = V.lvl, kind = g.burst ? g.burst.kind : 'twist', rec = P.esc[kind] || (P.esc[kind] = [0, 0]);
+    const chance = clamp(0.28 + 0.05 * L + 0.45 * stretch + (p.speed < 80 ? 0.12 : 0) - (p.speed > 250 ? 0.1 : 0), 0.2, 0.9);   // a controlled hold can fail an attempt
+    rec[0]++;
+    if (Math.random() < chance) {
+      rec[1]++; Evo.gain('escape', 2.5); G.evo.escapes++; Learn.rec('grab', false);
+      p.grabbed = false; p.gripT = 0; p.coolUntil = G.clock + 0.9;
+      V.grab = null; V.grabCd = 0.9; V.esc = 0; V.restT = 0.3; V.proj = 0.4;
+      Snd.play('escape'); Fx.ring(V.x, V.y, '#ffffff', V.R * 2.4);
+      if (Evo.has('pulse') && V.pulseCd <= 0) { this.pulse({ x: p.x, y: p.y }); return; }
+      const d = escapeDir({ x: p.x, y: p.y }, true); dashDir(d[0], d[1], vmax() * (kind === 'flip' ? 2.6 : 2.3), 0.3);
+      this.setState('evade'); V.stDur = 0.7; V.dodge = { kind: 'dash', t0: G.clock, hit: false, done: false };
+    } else {
+      g.burst = null; g.burstT = 0.9; V.esc = 0.35; V.exhaust = 0.8; Fx.emit(V.x, V.y - V.R, 4, { col: '#9fe3d6', kind: 'gel', spd: 60, size: 2.5, life: 0.5, grav: 0.5 });
+    }
+  },
+
+  /* ---------- tab migration ---------- */
+  startMigrate() {
+    const cands = TABS.filter((t) => t !== V.tab && navAlive(t));
+    if (!cands.length) { this.setState('flee'); return; }
+    let best = null, bs = -9;
+    cands.forEach((t) => { const c = navCenter(t); const s = -hyp(c.x - V.x, c.y - V.y) / 900 + rnd(0, 0.5) + (P.followN && P.followDelay < 2 ? (t === 'settings' ? 0.25 : 0) : 0); if (s > bs) { bs = s; best = t; } });
+    const others = cands.filter((t) => t !== best);
+    V.mig = { phase: 'approach', tab: best, t: 0, fake: others.length > 0 && Evo.has('fakeMig') && Math.random() < 0.55, switched: false, others, dir: { x: 0, y: 1 } };
+    this.setState('migrate'); V.dodge = V.dodge || { kind: 'migrate', t0: G.clock, hit: false, done: false }; if (V.dodge.kind !== 'migrate' && V.dodge.done) V.dodge = { kind: 'migrate', t0: G.clock, hit: false, done: false };
+  },
+  tickMigrate(dt) {
+    const m = V.mig; if (!m) { this.think(); return; }
+    m.t += dt;
+    const btn = navCenter(m.tab), vm = vmax();
+    if (m.phase === 'approach') {
+      const d = steer(btn.x, btn.y, vm * 1.3, 900, dt);
+      if (m.fake && !m.switched && d < 120) {                                           // feint toward one tab, commit to another
+        m.switched = true; m.tab = pick(m.others); V.startle = 0.25; const c = navCenter(m.tab); V.vx *= -0.2; V.vy *= -0.2; V.tx = c.x;
+      }
+      if (!navAlive(m.tab)) { V.mig = null; this.setState('flee'); return; }
+      if (d < V.R * 0.95 || m.t > 6) { const l = hyp(V.vx, V.vy) || 1; m.dir = { x: V.vx / l, y: V.vy / l }; m.phase = 'scratch'; m.t = 0; const b = $('.navb[data-tab="' + m.tab + '"]'); if (b) b.classList.add('sq'); Virus.impact(btn.x - V.x, btn.y - V.y, 300); }
+    } else if (m.phase === 'scratch') {
+      V.x = damp(V.x, btn.x, 14, dt); V.y = damp(V.y, btn.y - V.R * 0.2, 14, dt); V.vx = V.vy = 0;
+      V.startle = 0.1; Virus.jolt(110);
+      if (Math.random() < dt * 14) Fx.emit(btn.x, btn.y, 2, { col: '#43515f', kind: 'pix', spd: 120, size: 3, life: 0.35 });
+      if (m.t > 0.55) { m.phase = 'suck'; m.t = 0; Snd.play('whoosh'); }
+    } else {
+      const k = clamp(m.t / 0.5, 0, 1), e = k * k;
+      V.sc = lerp(1, 0.08, e); V.x = lerp(V.x, btn.x, 0.25); V.y = lerp(V.y, btn.y, 0.25);
+      if (Math.random() < dt * 40) { const a = rnd(0, TAU), r = V.R * 1.6 * (1 - k); Fx.emit(btn.x + Math.cos(a) * r, btn.y + Math.sin(a) * r, 1, { col: '#ff6b7a', kind: 'gel', spd: 20, size: 2.5, life: 0.25, grav: 0 }); }
+      if (m.t >= 0.5) this.finishMigrate(false);
+    }
+  },
+  finishMigrate(silent) {
+    const m = V.mig; if (!m) return;
+    V.mig = null; $$('.navb.sq').forEach((b) => b.classList.remove('sq'));
+    V.migEntry = { dir: m.dir }; V.tab = m.tab; V.hidden = true; V.sc = 1; V.back = false; V.migAt = G.clock; V.tabSince = G.clock; V.offT = 0; V.munchT = rnd(4, 8);
+    G.stats.migr++; Evo.gain('migrate', 1.2); V.vx = V.vy = 0;
+    V.state = 'recover'; V.stT = 0; V.stDur = rnd(5, 9); V.prev.push('migrate'); if (V.prev.length > 5) V.prev.shift();
+    if (!silent) Snd.play('pop');
+    updateHud(0, true);
+  },
+  emerge() {
+    const c = navCenter(V.tab), ent = V.migEntry;
+    const cx = A.w / 2 - c.x, cy = A.h / 2 - c.y, cl = hyp(cx, cy) || 1, inx = cx / cl, iny = cy / cl;       // inward normal of the tab bar
+    let dx = ent ? ent.dir.x : rnd(-1, 1), dy = ent ? ent.dir.y : -1;
+    if (dx * inx + dy * iny < 0.3) { dx = inx * 0.75 + (dx - (dx * inx + dy * iny) * inx) * 0.6; dy = iny * 0.75 + (dy - (dx * inx + dy * iny) * iny) * 0.6; }
+    const l = hyp(dx, dy) || 1; dx /= l; dy /= l;
+    V.hidden = false; V.back = false; Virus.place(c.x, c.y); V.sc = 0.15; V.emerge = 0.5; V.spawnT = 1;
+    V.vx = dx * 330; V.vy = dy * 330; V.startle = 0.4; V.migEntry = null; V.ambush = null;
+    $$('.navb.sq').forEach((b) => b.classList.remove('sq'));
+    const b = $('.navb[data-tab="' + V.tab + '"]'); if (b) { b.classList.add('sq'); later(0.35, () => b.classList.remove('sq')); }
+    Fx.ring(c.x, c.y, '#ff8896', V.R * 2.4); Fx.emit(c.x, c.y, 10, { col: '#ff6b7a', kind: 'gel', spd: 200, size: 3, life: 0.5, grav: 0.3 });
+    Snd.play('pop');
+    V.state = 'idle'; this.setState(V.hp < V.hpMax * 0.45 ? 'flee' : 'explore');
+    updateHud(0, true);
+  },
+  offscreen(dt) {
+    V.offT += dt; V.hp = Math.min(V.hpMax * 0.85, V.hp + 2.2 * dt);
+    V.munchT -= dt;
+    if (V.munchT <= 0) {                                                       // munches quietly; damage shows when the player opens that tab
+      V.munchT = rnd(5, 9);
+      const pool = UI.items.filter((it) => !it.dead && !it.ess && it.kind !== 'text' && it.kind !== 'hud' && it.tab === V.tab && it.integ > Math.ceil(it.max * 0.35));
+      if (pool.length) { const it = pick(pool); it.integ--; it.bites.push({ u: rnd(0.1, 0.9), v: rnd(0.1, 0.9) }); }
+    }
+    if (G.phase === 'play' && !V.ambush && V.offT > 5 && V.hp > V.hpMax * 0.55 && Math.random() < dt * 0.18 * (0.5 + G.diff)) V.ambush = { t: 0, tab: G.tab };
+    if (V.ambush) {
+      const a = V.ambush; a.t += dt;
+      if (a.tab !== G.tab) { V.ambush = null; $$('.navb.sq').forEach((b) => b.classList.remove('sq')); return; }
+      if (a.t > 0.9) { const b = $('.navb[data-tab="' + a.tab + '"]'); if (b && !b.classList.contains('sq')) { b.classList.add('sq'); Snd.play('glitch'); } }
+      if (a.t > 1.8) { V.tab = a.tab; V.migEntry = { dir: { x: rnd(-0.6, 0.6), y: -1 } }; this.emerge(); }
+    }
+  },
+  onTabShown(tab, prev) {
+    if (G.phase === 'play' && prev) {
+      P.tabSw++;
+      if (V.migAt > 0 && tab === V.tab) { P.followDelay = ema(P.followDelay, Math.min(12, G.clock - V.migAt), 0.3); P.followN++; V.migAt = 0; P.samples++; }
+    }
+    if (V.mig) this.finishMigrate(true);
+    if (V.ambush && V.ambush.tab !== tab) { V.ambush = null; $$('.navb.sq').forEach((b) => b.classList.remove('sq')); }
+    if (V.alive && V.dying <= 0 && V.tab === tab && V.hidden) this.emerge();
+    Combat.forceDrop(); V.back = false;
+    requestAnimationFrame(() => refreshDamage(tab));
+  },
+  reset() { this.visited.length = 0; this.ban = {}; this.failLog = []; this.wdCd = 0; this.hitLog.length = 0; this.juke = null; this.dsub = 'charge'; this.dsubT = 0; this.munchT = 6; this.recentSides.length = 0; },
+};
+AI.diffT = 0;
+
+/* ================= Learning: what the player does and how well it works ================= */
+const Learn = {
+  rep: { tap: 0, grab: 0, throw: 0, weapon: 0, pull: 0 },
+  rec(k, ok) { const r = P.strat[k]; if (!r) return; r[0]++; if (ok) r[1]++; this.rep[k] = (this.rep[k] || 0) + 1; P.samples++; },
+  tick(dt) { const f = Math.exp(-dt / 25); for (const k in this.rep) this.rep[k] *= f; },
+  dom(k) { let sum = 0; for (const q in this.rep) sum += this.rep[q]; return sum > 3 ? this.rep[k] / sum : 0; },
+  counter(k) { return Evo.has('counter') ? clamp((this.dom(k) - 0.35) * 1.5, 0, 0.55) : 0; },   // how hard it counters a repeated habit
+  wallRatio() { return P.throwN > 3 ? P.wallThrow / P.throwN : 0; },
+  sideW(f) {
+    if (!f || !Evo.has('memory')) return 1;
+    const g = P.grabSide, tot = g[0] + g[1] + g[2] + g[3]; if (tot < 3) return 1;
+    const dx = f.x - V.x, dy = f.y - V.y, sd = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 0 : 1) : (dy < 0 ? 2 : 3);
+    return 1 + clamp(((g[sd] + 0.5) / (tot + 2) - 0.25) * 2.4, 0, 0.9) * Evo.learn();
+  },
+  favSide() { const g = P.grabSide, tot = g[0] + g[1] + g[2] + g[3]; return tot < 3 ? -1 : g.indexOf(Math.max.apply(null, g)); },
+  reset() { for (const k in this.rep) this.rep[k] = 0; },
+};
+
+/* ================= Combat: impacts, damage, stun, combos, grab and release ================= */
+const cmEl = $('#combo'), cmN = $('#cmN'), cmL = $('#cmL');
+const Combat = {
+  log: [], cd: {}, last: { throw: -9, pullThrow: -9, impact: -9, grab: -9 }, prevSrc: '', prevLabel: '', showT: 0, throwPending: null, throwCounted: false,
+  reset() { this.cd = {}; this.last = { throw: -9, pullThrow: -9, impact: -9, grab: -9 }; this.prevSrc = this.prevLabel = ''; this.showT = 0; this.throwPending = null; cmEl.classList.remove('show'); Learn.reset(); },
+
+  showCombo(label, pts) {
+    cmN.textContent = V.combo >= 2 ? 'x' + V.combo : '+' + pts;
+    cmL.textContent = label + (V.combo >= 2 ? '  +' + pts : '');
+    cmEl.classList.add('show'); this.showT = 1.25;
+  },
+
+  /* one impact of the virus against a wall, a piece of UI or a thrown object */
+  virusHit(o) {
+    if (!V.alive || V.dying > 0) return;
+    const sk = sizeK(), nx = o.nx, ny = o.ny, kind = o.kind, spd = o.spd;
+    const harmful = V.proj > 0 || !!V.grab || kind === 'weapon';
+    if (!harmful) { Virus.impact(nx, ny, spd * 0.6); if (spd > 200) Snd.play('tap'); return; }      // the virus bumping into things by itself is harmless
+    const T0 = 250 * sk, T1 = 1050 * sk, mass = o.mass || 1, eff = spd * (0.62 + 0.38 * mass);
+    if (eff < T0 * 0.55) return;                                       // resting contact is not an event
+    if ((this.cd[o.src] || 0) > G.clock) return;                       // collision cooldown: one touch is one impact
+    this.cd[o.src] = G.clock + (kind === 'weapon' ? 0.45 : 0.3);
+    if (eff < T0 * 1.2) { Virus.impact(nx, ny, eff * 0.7); Snd.play('tap'); Fx.emit(o.x, o.y, 2, { col: '#ff9aa6', kind: 'pix', spd: 80, size: 3, life: 0.25 }); return; }   // light bump: feedback only
+    const sev = clamp((eff - T0) / (T1 - T0), 0, 1);
+    let dmg = (1.5 + 13 * Math.pow(sev, 1.1)) * (kind === 'weapon' ? 1.12 : kind === 'ui' ? 0.95 : 1) * (1 + 0.06 * Math.min(6, V.combo)) * (V.stun > 0 ? 1.25 : 1) * Evo.p('dmgRes') * (V.brace > 0 ? 0.7 : 1);
+    V.hp = Math.max(0, V.hp - dmg); G.lastHitT = G.clock; V.lastImpactT = G.clock; this.last.impact = G.clock;
+    this.log.push({ t: +G.clock.toFixed(2), src: o.src, spd: Math.round(spd), sev: +sev.toFixed(2), dmg: +dmg.toFixed(1) }); if (this.log.length > 40) this.log.shift();
+    // body reaction: squash along the normal, jelly shake, spin, startle
+    Virus.impact(nx, ny, 320 + 900 * sev); Virus.jolt(60 + 260 * sev);
+    V.hurt = Math.max(V.hurt, 0.25 + 0.35 * sev); V.startle = 0.2; V.rotV += rnd(-1, 1) * (3 + 9 * sev);
+    if (V.grab) V.esc = Math.max(0, V.esc - (0.18 + 0.5 * sev));
+    if (sev > 0.18) {                                                   // stunned for as long as the hit was heavy
+      const d = (0.35 + 1.3 * sev) * Evo.p('stunRes');
+      V.stun = Math.max(V.stun, d); V.stunMax = Math.max(V.stunMax, V.stun);
+      if (!V.grab && V.state !== 'stunned') AI.setState('stunned');
+      Snd.play('stun'); P.slamN++;
+    }
+    // combo and score: only real impacts count
+    V.combo++; V.comboT = 2.4;
+    const pts = Math.round((10 + 90 * sev) * (1 + 0.5 * (V.combo - 1))); G.score += pts;
+    const since = (k) => G.clock - this.last[k];
+    let label;
+    if (o.debris) label = 'DEBRIS HIT!';
+    else if (kind === 'weapon') label = since('pullThrow') < 5 ? 'PULL · THROW · HIT!' : 'WEAPON HIT!';
+    else if (V.grab) label = o.src === 'floor' ? 'SLAM!' : kind === 'ui' ? 'UI SLAM!' : 'WALL SLAM!';
+    else if (since('throw') < 1.8) label = kind === 'ui' ? 'UI CRASH!' : o.src === 'floor' ? 'FLOOR BOUNCE!' : 'RICOCHET!';
+    else label = 'IMPACT!';
+    if (this.prevLabel && /SLAM|RICOCHET|CRASH/.test(this.prevLabel) && o.src !== this.prevSrc && G.clock - this.prevAt < 1.3 && !V.grab) label = 'REBOUND!';
+    else if (this.prevAt && G.clock - this.prevAt < 1.5 && V.combo >= 3 && kind === 'weapon') label = 'FOLLOW-UP!';
+    this.prevSrc = o.src; this.prevLabel = label; this.prevAt = G.clock;
+    this.showCombo(label, pts);
+    // visual and audio weight scale with severity
+    const q = QL[G.qLevel];
+    Fx.emit(o.x, o.y, 4 + Math.round(22 * sev), { col: '#ff6b7a', kind: 'gel', spd: 160 + 380 * sev, size: 3 + 2 * sev, life: 0.5 + 0.4 * sev });
+    if (sev > 0.3) Fx.emit(o.x, o.y, 6 + Math.round(10 * sev), { col: '#ffffff', kind: 'pix', spd: 260 + 300 * sev, size: 3, life: 0.4 });
+    if (sev > 0.35) Fx.ring(o.x, o.y, '#ffffff', V.R * (1.5 + 2 * sev));
+    G.shake = Math.max(G.shake, (1 + 7 * sev) * q.shake * (G.reduced ? 0.2 : 1));
+    if (sev > 0.45 && G.clock - G.hitStopAt > 0.3) { G.hitStop = 0.035 + 0.07 * sev; G.hitStopAt = G.clock; }      // a few frames of weight, never a stall
+    Snd.play('slam', sev); if (sev > 0.3) Snd.play('hurt');
+    // the UI that was hit
+    let broke = false;
+    if (o.item) { UIFx.react(o.item, nx, ny, sev, o.x, o.y); broke = UIFx.damage(o.item, sev, o.x, o.y, -nx * spd, -ny * spd); }
+    UIFx.near(o.x, o.y, sev, o.item, nx, ny);
+    if (!broke && sev > 0.5) Glitch.hit(o.x, o.y, 2, o.item || null);
+    // learning: which of the player's tools just worked, and where
+    heatAdd(P.slamHeat, o.x, o.y, 0.6 + sev);
+    if (kind === 'weapon') Learn.rec('weapon', true);
+    else if (V.grab) Learn.rec('grab', true);
+    else if (V.proj > 0 && since('throw') < 2) { if (!this.throwCounted) { this.throwCounted = true; Learn.rec('throw', true); if (kind === 'wall' || kind === 'ui') P.wallThrow++; } this.throwPending = null; }
+    if (V.hp > V.hpMax * 0.35) Evo.gain('survive', 0.7 * sev);
+    if (V.hp <= 0) AI.die();
+  },
+
+  tryGrab(p) {
+    if (V.grab || !V.alive || V.dying > 0 || V.hidden || V.tab !== G.tab || V.evoT > 0) return false;
+    V.grab = { id: p.id, t: 0, burst: null, burstT: rnd(0.9, 1.4), acc: 0 };
+    p.grabbed = true; p.cand = false;
+    V.esc = 0; V.exhaust = 0; V.escCd = 0.4; V.struggle = 0; V.proj = 1; V.lure = 0; V.lureRoll = null;
+    V.vx *= 0.3; V.vy *= 0.3; V.back = false;
+    AI.setState('grabbed');
+    Snd.play('grab'); Fx.ring(V.x, V.y, '#ffb703', V.R * 2.2); G.shake = Math.max(G.shake, 2 * QL[G.qLevel].shake);
+    this.last.grab = G.clock;
+    P.grabN++; P.holdAvg = ema(P.holdAvg, p.gripT, 0.2); heatAdd(P.grabHeat, p.x, p.y, 1);
+    const dx = p.x0 - V.x, dy = p.y0 - V.y; P.grabSide[Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 0 : 1) : (dy < 0 ? 2 : 3)]++;
+    if (G.clock - V.lastImpactT < 1.6 && V.lastImpactT > 0) {            // caught it again before it recovered
+      V.combo++; V.comboT = 2.4; const pts = 25 * V.combo; G.score += pts; this.showCombo('CATCH AGAIN!', pts);
+    }
+    return true;
+  },
+
+  /* the finger lets go: the virus leaves with the finger's velocity */
+  release(p) {
+    if (!V.grab) return;
+    V.grab = null; V.grabCd = 0.25; V.esc = 0;
+    if (p) p.grabbed = false;
+    let vx = p ? p.vx : 0, vy = p ? p.vy : 0; const s0 = hyp(vx, vy), cap = 1650 * sizeK();
+    if (s0 > cap) { vx *= cap / s0; vy *= cap / s0; }
+    V.vx = vx * 0.95 + V.vx * 0.1; V.vy = vy * 0.95 + V.vy * 0.1;
+    V.proj = 2.6; V.thrownAt = G.clock; V.rotV = clamp(vx * 0.012 + rnd(-2, 2), -14, 14); V.brace = Evo.has('counter') ? 1 : 0;
+    const sp = hyp(V.vx, V.vy);
+    if (sp > 380 * sizeK()) {
+      Snd.play('throw'); this.last.throw = G.clock; this.throwCounted = false; this.throwPending = { t: G.clock };
+      P.throwN++; P.throwDirs[((Math.atan2(V.vy, V.vx) / TAU + 1) % 1 * 8) | 0]++;
+      Fx.emit(V.x, V.y, 6, { col: '#ffffff', kind: 'pix', spd: 120, size: 3, life: 0.3, grav: 0 });
+    }
+    AI.setState(V.stun > 0 ? 'stunned' : 'thrown');
+  },
+  forceDrop() { if (!V.grab) return; const p = Input.ptrs.get(V.grab.id); if (p) p.grabbed = false; V.grab = null; V.grabCd = 0.4; },
+
+  /* thrown UI and fresh debris hitting the virus; resting objects only get pushed */
+  bodyContacts() {
+    if (!(V.alive && !V.hidden && V.tab === G.tab && V.dying <= 0 && V.sc > 0.5)) return;
+    const cs = Virus.colliders();
+    for (const b of Phys.B) {
+      if (b.tab !== G.tab || b.dying) continue;
+      const isUi = b.type === 'ui', hotShard = b.type === 'shard' && b.hot > G.clock;
+      if (!isUi && !hotShard) continue;
+      if (b.asleep) Phys.ext(b);
+      for (const c of cs) {
+        let nx, ny, pen, px, py;
+        if (b.shape === 'c') { const dx = c.x - b.x, dy = c.y - b.y, d = hyp(dx, dy), rr = b.r + c.r; if (d >= rr) continue; nx = d > 1e-4 ? dx / d : 0; ny = d > 1e-4 ? dy / d : -1; pen = rr - d; px = b.x + nx * b.r; py = b.y + ny * b.r; }
+        else {
+          const cx = clamp(c.x, b.x - b.ehw, b.x + b.ehw), cy = clamp(c.y, b.y - b.ehh, b.y + b.ehh), ex = c.x - cx, ey = c.y - cy, d2 = ex * ex + ey * ey;
+          if (d2 >= c.r * c.r) continue;
+          if (d2 > 1e-6) { const d = Math.sqrt(d2); nx = ex / d; ny = ey / d; pen = c.r - d; } else { nx = c.x < b.x ? -1 : 1; ny = 0; pen = c.r; }
+          px = cx; py = cy;
+        }
+        const rel = (b.vx - V.vx) * nx + (b.vy - V.vy) * ny;               // >0: closing, measured along the contact normal
+        const bodyClose = b.vx * nx + b.vy * ny, virClose = -(V.vx * nx + V.vy * ny), m = b.mass || 0.4;
+        if (rel > 0) { const j = 1.35 * rel / (1 / m + 1); b.vx -= nx * j / m; b.vy -= ny * j / m; if (!V.grab) { V.vx += nx * j; V.vy += ny * j; } else { V.vx += nx * j * 0.4; V.vy += ny * j * 0.4; } }
+        b.x -= nx * pen * 0.8; b.y -= ny * pen * 0.8; b.asleep = false; b.st = 0; b.touch = true;
+        if (rel > 0 && (b.hot > G.clock || b.held)) {
+          this.virusHit({ src: 'body' + b.id, nx, ny, spd: Math.max(0, bodyClose) * 0.9 + Math.max(0, virClose) * 0.35, x: px, y: py, kind: 'weapon', mass: m, debris: !isUi });
+        } else if (rel > 200) Snd.play('tap');
+      }
+    }
+  },
+  /* a thrown object about to reach the virus (used by smarter levels to dodge) */
+  incoming() {
+    const sk = sizeK(); let best = null, bt = 9;
+    for (const b of Phys.B) {
+      if (b.type !== 'ui' || b.tab !== G.tab || b.dying || b.hot <= G.clock) continue;
+      const sp = hyp(b.vx, b.vy); if (sp < 380 * sk) continue;
+      const rx = V.x - b.x, ry = V.y - b.y, t = (rx * b.vx + ry * b.vy) / (sp * sp);
+      if (t < 0.03 || t > 0.55) continue;
+      const cx = b.x + b.vx * t - V.x, cy = b.y + b.vy * t - V.y;
+      if (hyp(cx, cy) > V.R + Math.max(b.hw || b.r, b.hh || b.r) * 0.8 + 10) continue;
+      if (t < bt) { bt = t; best = { b, t, cx, cy }; }
+    }
+    return best;
+  },
+  update(dt) {
+    Learn.tick(dt);
+    if (this.showT > 0) { this.showT -= dt; if (this.showT <= 0) cmEl.classList.remove('show'); }
+    if (this.throwPending && G.clock - this.throwPending.t > 1.5) { this.throwPending = null; if (!this.throwCounted) Learn.rec('throw', false); }
+    this.bodyContacts();
+  },
+};
+
+/* ================= Evolution: ten levels that change what the virus does ================= */
+const LVN = ['', 'Newborn', 'Reactive', 'Evasive', 'Predictive', 'Deceptive', 'Tactical', 'Escape Artist', 'Adaptive Hunter', 'Advanced Organism', 'Apex Virus'];
+const LVP = {
+  spd:    [0, 0.70, 0.78, 0.86, 0.94, 1.0, 1.06, 1.12, 1.18, 1.24, 1.30],     // movement speed
+  react:  [0, 0.20, 0.12, 0.08, 0.05, 0.03, 0.02, 0.01, 0, -0.02, -0.04],    // extra reaction delay (seconds)
+  rest:   [0, 1.0, 0.8, 0.65, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25],        // vulnerable window after each dodge
+  range:  [0, 0.8, 0.95, 1, 1, 1.05, 1.1, 1.1, 1.15, 1.2, 1.25],             // how far away it notices a finger
+  learn:  [0, 0.1, 0.25, 0.4, 0.7, 0.8, 0.9, 1, 1, 1, 1],                    // how much it trusts what it learned about you
+  escRate: [0, 0.10, 0.14, 0.18, 0.22, 0.27, 0.33, 0.42, 0.5, 0.58, 0.7],    // grab escape energy per second
+  stunRes: [0, 1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.65, 0.6, 0.55, 0.5],
+  dmgRes: [0, 1, 1, 0.97, 0.94, 0.9, 0.86, 0.82, 0.78, 0.74, 0.7],
+};
+const FEAT = { hide: 2, migDodge: 2, approach: 2, visited: 2, side: 3, juke: 3, midturn: 3, predict: 4, memory: 4, bait: 5, fakeMig: 5, cover: 6, weaponDodge: 6, escMulti: 7, migDisadv: 7, counter: 8, chain: 9, integrity: 9, risk: 10, pulse: 10 };
+const ABIL = ['', 'Slow and clumsy. It rests after every dodge.', 'Notices your finger and reacts faster.', 'Sidesteps and changes direction mid-dash.', 'Predicts where your finger is heading.', 'Fakes being frozen to bait your grab.', 'Hides behind UI and dodges thrown objects.', 'Wriggles free in several different ways.', 'Counters the moves you keep repeating.', 'Chains dodges, fakes and tab jumps.', 'Weighs risk and unleashes shock pulses.'];
+const PALS = {};
+const Evo = {
+  name(l) { return LVN[l] || ''; },
+  has(f) { return V.lvl >= FEAT[f]; },
+  p(k) { return LVP[k][V.lvl]; },
+  learn() { return LVP.learn[V.lvl]; },
+  need(l) { return 5 + 2.5 * l; },
+  rBase() { return clamp(Math.min(A.w, A.h) * 0.075, 24, 40) * (1 + 0.015 * (V.lvl - 1)); },
+  pal(l) {
+    if (PALS[l]) return PALS[l];
+    const t = (l - 1) / 9, mx = (a, b) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+    const c1 = mx([255, 150, 165], [255, 90, 95]), c2 = mx([236, 86, 104], [150, 12, 40]), c3 = mx([176, 52, 72], [52, 0, 16]);
+    return (PALS[l] = { c1, c2, c3, c3s: 'rgb(' + c3.join(',') + ')', line: l >= 8 ? '#2a0008' : '#7a0b1b', aura: l >= 10 ? '#ffd24a' : '#ff7a8c' });
+  },
+  reset() { G.evo = { lvl: 1, ep: 0, lastUp: G.clock, chase: 0, escapes: 0 }; V.lvl = 1; V.hpMax = 100; V.hp = 100; $('#evoBanner').classList.remove('show'); },
+  gain(kind, amt) {
+    if (G.phase !== 'play' || !V.alive || V.dying > 0) return;
+    G.evo.ep += amt; this.check();
+  },
+  check() {
+    const e = G.evo;
+    if (V.lvl < 10 && e.ep >= this.need(V.lvl) && G.clock - e.lastUp >= 14 && V.evoT <= 0 && !V.grab && V.dying <= 0 && V.alive && !V.hidden) this.levelUp();
+  },
+  levelUp() { G.evo.ep -= this.need(V.lvl); this.apply(V.lvl + 1, true); },
+  apply(l, announce) {
+    V.lvl = l; G.evo.lvl = l; G.evo.lastUp = G.clock; P.maxLvl = Math.max(P.maxLvl || 1, l);
+    V.hpMax = 100 + 6 * (l - 1); V.hp = Math.min(V.hpMax, V.hp + V.hpMax * 0.18);
+    V.R = this.rBase();
+    if (!announce) return;
+    const PL = this.pal(l), apex = l >= 10;
+    V.evoT = apex ? 2.6 : 1.5; V.stun = 0; V.vx *= 0.2; V.vy *= 0.2; V.proj = 0; V.back = false;
+    AI.setState('evolve');
+    Snd.play('evolve', l);
+    Fx.ring(V.x, V.y, PL.aura, V.R * 3.5); later(0.25, () => Fx.ring(V.x, V.y, '#ffffff', V.R * 4.5)); later(0.5, () => Fx.ring(V.x, V.y, PL.aura, V.R * 5.5));
+    if (apex) { later(0.9, () => { Fx.ring(V.x, V.y, '#ffd24a', V.R * 8); Snd.play('pulse'); G.shake = Math.max(G.shake, 12 * QL[G.qLevel].shake); }); later(1.4, () => Fx.ring(V.x, V.y, '#ff3b55', V.R * 10)); }
+    Fx.emit(V.x, V.y, apex ? 70 : 34, { col: PL.aura, kind: 'gel', spd: apex ? 640 : 440, size: 4, life: 1, grav: 0 });
+    G.shake = Math.max(G.shake, (4 + l) * QL[G.qLevel].shake);
+    appEl.classList.remove('flash'); void appEl.offsetWidth; appEl.classList.add('flash'); later(0.4, () => appEl.classList.remove('flash'));
+    $('#evT').textContent = 'LV ' + l + ' · ' + LVN[l].toUpperCase(); $('#evS').textContent = ABIL[l];
+    const b = $('#evoBanner'); b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+    updateHud(0, true);
+  },
+  update(dt) {
+    const e = G.evo;
+    e.ep += dt * 0.045;                                    // surviving counts for something on its own
+    if (V.threat > 0.35 && !V.hidden) e.ep += dt * 0.12;    // and so does living through a chase
+    if (V.evoT > 0) { V.evoT -= dt; if (V.evoT <= 0 && V.state === 'evolve') { AI.setState(V.lvl >= 5 ? 'taunt' : 'explore'); } }
+    this.chk = (this.chk || 0) - dt; if (this.chk <= 0) { this.chk = 0.5; this.check(); }
+  },
+};
+
+/* ================= Touch and Pointer Input ================= */
+const shell = $('#shell');
+let booted = false;
+function measureApp() {
+  const r = appEl.getBoundingClientRect();
+  A.left = r.left; A.top = r.top;
+  A.dpr = Math.min(window.devicePixelRatio || 1, QL[G.qLevel].dpr);
+  if (Math.abs(r.width - A.w) > 0.5 || Math.abs(r.height - A.h) > 0.5) {
+    const sx = r.width / A.w, sy = r.height / A.h;
+    A.w = r.width; A.h = r.height;
+    if (booted) {
+      V.x *= sx; V.y *= sy; V.R = Evo.rBase();
+      V.nubs.forEach((n) => { n.x *= sx; n.y *= sy; n.vx = n.vy = 0; });
+      Phys.rescale(sx, sy);
+      Fx.clear();
+    }
+    sizeCanvases();
+    if (booted) later(0.05, refreshStatics);
+  }
+}
+const Input = {
+  ptrs: new Map(), missRun: 0, lastTapT: 0, noClickUntil: 0, lastScratch: 0,
+  init() {
+    appEl.addEventListener('pointerdown', (e) => this.down(e), true);
+    window.addEventListener('pointermove', (e) => this.move(e), { passive: true });
+    window.addEventListener('pointerup', (e) => this.up(e), { passive: true });
+    window.addEventListener('pointercancel', (e) => this.up(e), { passive: true });
+    appEl.addEventListener('lostpointercapture', (e) => { const p = this.ptrs.get(e.pointerId); if (p && p.down && e.pointerType !== 'mouse' && G.phase === 'play') this.up(e); });
+    appEl.addEventListener('click', (e) => { if (performance.now() < this.noClickUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
+    appEl.addEventListener('touchmove', (e) => { if (!(e.target && e.target.tagName === 'INPUT')) e.preventDefault(); }, { passive: false });
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    appEl.addEventListener('contextmenu', (e) => e.preventDefault());
+  },
+  holdSec() { return G.holdMs / 1000; },
+  reset() { this.cancelAll(); this.ptrs.clear(); this.missRun = 0; this.lastTapT = 0; },
+  /* drop everything the fingers are holding: pause, restart, tab change, game over */
+  cancelAll() {
+    for (const p of this.ptrs.values()) { this.cancelPull(p); p.down = false; p.grabbed = false; p.mode = 'none'; p.body = null; p.gripT = 0; }
+    Phys.releaseAll(); Combat.forceDrop(); V.gripP = 0;
+  },
+  rec(e) {
+    let p = this.ptrs.get(e.pointerId);
+    const l = toLocal(e.clientX, e.clientY), now = performance.now() / 1000;
+    if (!p) { p = { id: e.pointerId, type: e.pointerType, x: l.x, y: l.y, vx: 0, vy: 0, speed: 0, down: false, hist: [], chaseT: 0, moved: 0, holdT: 0, grabbed: false, t0: now, lastMove: now, mode: 'none', gripT: 0, coolUntil: 0, maxGrip: 0, pull: null, body: null, cand: false }; this.ptrs.set(e.pointerId, p); }
+    p.type = e.pointerType; const ox = p.x, oy = p.y; p.x = l.x; p.y = l.y;
+    p.hist.push({ x: l.x, y: l.y, t: now }); while (p.hist.length > 2 && now - p.hist[0].t > 0.22) p.hist.shift();
+    const a = p.hist[0], b = p.hist[p.hist.length - 1], dt = b.t - a.t;
+    if (dt > 0.02) { p.vx = (b.x - a.x) / dt; p.vy = (b.y - a.y) / dt; p.speed = hyp(p.vx, p.vy); }
+    p.lastMove = now; p.dMove = hyp(p.x - ox, p.y - oy); p.now = now;
+    return p;
+  },
+  finger(x, y) {
+    let best = null, bd = 1e9;
+    for (const p of this.ptrs.values()) {
+      if (!p.down && p.type !== 'mouse') continue;
+      const d = hyp(p.x - x, p.y - y); if (d < bd) { bd = d; best = p; }
+    }
+    return best;
+  },
+  breakGrip(p) { p.gripT = 0; p.coolUntil = G.clock + 0.7; },
+  /* which UI element would a long press pull out? */
+  pullTarget(node) {
+    while (node && node !== appEl) {
+      let it = UI.byEl.get(node);
+      if (it) { if (it.kind === 'text' && it.parent) it = it.parent; return canPull(it) ? it : null; }
+      node = node.parentElement;
+    }
+    return null;
+  },
+  down(e) {
+    if (G.phase !== 'play' || (e.target.closest && e.target.closest('.ov'))) return;
+    measureApp();
+    const p = this.rec(e); p.down = true; p.t0 = p.now; p.x0 = p.x; p.y0 = p.y; p.holdT = 0; p.chaseT = 0; p.moved = 0; p.grabbed = false;
+    p.mode = 'free'; p.gripT = 0; p.maxGrip = 0; p.counted = false; p.cand = false; p.tapH = null; p.pull = null; p.body = null;
+    if (e.target.tagName === 'INPUT') { p.mode = 'none'; return; }          // typing is left alone
+    try { appEl.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }   // the drag keeps following this finger wherever it goes
+    const gap = p.now - this.lastTapT;
+    if (this.lastTapT > 0 && gap < 4) P.tapGap = ema(P.tapGap, gap, 0.18);
+    this.lastTapT = p.now; P.tapSpd = ema(P.tapSpd, p.speed, 0.15); heatAdd(P.heat, p.x, p.y, 1); G.stats.taps++; P.samples++;
+    const touch = e.pointerType !== 'mouse', gh = AI.hitTest(p.x, p.y, 0, touch ? 20 : 13);
+    if (gh) {                                                              // on the virus: a quick tap hits, a hold grabs
+      p.mode = 'virus'; p.tapH = AI.hitTest(p.x, p.y, p.speed); p.cand = true; V.startle = Math.max(V.startle, 0.12);
+      Snd.play('tap'); Fx.ring(p.x, p.y, '#ffb703', 22); this.noClickUntil = performance.now() + 450; e.preventDefault();
+      return;
+    }
+    const b = Phys.pickUi(p.x, p.y);
+    if (b) { p.mode = 'body'; p.body = b; Phys.hold(b, p); Snd.play('grab'); this.noClickUntil = performance.now() + 450; e.preventDefault(); return; }
+    const it = this.pullTarget(e.target);
+    if (it) p.pull = { it, t: 0, ready: false, det: false, ox: p.x, oy: p.y }, p.mode = 'ui';
+    if (V.alive && V.dying <= 0 && !V.hidden && V.tab === G.tab && AI.nearMiss(p.x, p.y)) {
+      this.missRun++; V.missStreak++; V.startle = 0.2; P.hitRate = ema(P.hitRate, 0, 0.08); Learn.rec('tap', false); Snd.play('tap');
+      Fx.emit(p.x, p.y, 3, { col: '#9aa7b2', kind: 'pix', spd: 90, size: 3, life: 0.3 });
+    }
+  },
+  move(e) {
+    if (G.phase !== 'play' && G.phase !== 'menu') return;
+    const p = this.rec(e);
+    if (!p.down) return;
+    p.moved += p.dMove;
+    if (p.speed > 150 && p.now - (p.lastDir || 0) > 0.08) { p.lastDir = p.now; P.dirs[((Math.atan2(p.vy, p.vx) / TAU + 1) % 1 * 8) | 0]++; }
+    if (V.alive && V.dying <= 0 && !V.hidden && V.tab === G.tab && p.speed > 110 && hyp(p.x - V.x, p.y - V.y) < 280) p.chaseT += Math.min(0.05, p.dMove / Math.max(60, p.speed));
+    if (p.mode === 'ui' && p.pull && !p.pull.det && !p.pull.ready && hyp(p.x - p.pull.ox, p.y - p.pull.oy) > 16) this.cancelPull(p);   // moved before the hold finished: not a pull
+    if (p.mode === 'virus' && p.cand && p.moved > 26) p.cand = false;
+    if (p.speed > 200 && !p.grabbed && (p.mode === 'free' || (p.mode === 'virus' && !p.cand)) && p.now - this.lastScratch > 0.1) {    // dragging through the body scratches and herds it
+      const h = AI.hitTest(p.x, p.y, p.speed);
+      if (h && h.depth > 0.05) { this.lastScratch = p.now; AI.onHit(h, p.x, p.y, 'scratch'); const l = p.speed || 1; V.vx += p.vx / l * 40; V.vy += p.vy / l * 40; }
+    }
+  },
+  cancelPull(p) {
+    const pl = p.pull; if (!pl) return;
+    if (!pl.det && pl.it && pl.it.el) { pl.it.el.classList.remove('pull-a', 'pull-b'); pl.it.el.style.transform = UIFx.base(pl.it); }
+    p.pull = null; if (p.mode === 'ui') p.mode = 'free';
+  },
+  up(e) {
+    const p = this.ptrs.get(e.pointerId); if (!p) return;
+    if (p.down && G.phase === 'play') {
+      const dur = performance.now() / 1000 - p.t0, hs = this.holdSec();
+      if (dur > 0.3 && p.moved > 40) P.dragRatio = ema(P.dragRatio, clamp(p.chaseT / Math.max(0.25, dur), 0, 1), 0.22);
+      else P.dragRatio = ema(P.dragRatio, 0, 0.04);
+      if (p.mode === 'virus') {
+        if (p.grabbed && V.grab && V.grab.id === p.id) Combat.release(p);                      // let go: throw with the finger's velocity
+        else if (p.cand && e.type !== 'pointercancel' && dur < hs * 1.1 && p.moved < 26) {      // quick tap: attack
+          if (p.tapH) { AI.onHit(p.tapH, p.x, p.y, 'tap'); Learn.rec('tap', true); }
+          else { this.missRun++; V.missStreak++; P.hitRate = ema(P.hitRate, 0, 0.08); Learn.rec('tap', false); }
+          this.noClickUntil = performance.now() + 450;
+        } else if (p.maxGrip > hs * 0.4 && !p.grabbed) Learn.rec('grab', false);              // it slipped away before the grab finished
+      } else if (p.mode === 'ui') {
+        if (p.pull && p.pull.ready) this.noClickUntil = performance.now() + 450;               // a pull attempt must not press the button
+        this.cancelPull(p);
+      } else if (p.mode === 'body') {
+        const b = p.body;
+        if (b && b.held) {
+          const vx = clamp(p.vx, -1700, 1700), vy = clamp(p.vy, -1700, 1700); Phys.drop(b, vx, vy);
+          if (b.type === 'ui' && hyp(vx, vy) > 350) { Snd.play('throw'); Combat.last.pullThrow = G.clock; }
+        }
+      }
+    }
+    p.down = false; p.grabbed = false; p.mode = 'none'; p.body = null; p.gripT = 0;
+    try { appEl.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (p.type !== 'mouse') this.ptrs.delete(e.pointerId);
+  },
+  update(dt) {
+    const now = performance.now() / 1000, hs = this.holdSec(); let gp = 0;
+    for (const p of this.ptrs.values()) {
+      if (now - p.lastMove > 0.09) { p.vx *= Math.exp(-14 * dt); p.vy *= Math.exp(-14 * dt); p.speed = hyp(p.vx, p.vy); }
+      if (!p.down) continue;
+      if (p.mode === 'virus' && !p.grabbed && !V.grab) {
+        const on = AI.hitTest(p.x, p.y, 0, p.type === 'mouse' ? 13 : 20);
+        if (on && p.speed < 320 && V.alive && V.dying <= 0 && V.grabCd <= 0 && G.clock >= p.coolUntil) { p.gripT += dt; if (p.gripT > 0.12 && !p.counted) { p.counted = true; P.holdN++; } }
+        else p.gripT = Math.max(0, p.gripT - dt * 2);
+        p.maxGrip = Math.max(p.maxGrip, p.gripT); gp = Math.max(gp, p.gripT / hs);
+        if (p.gripT >= hs) Combat.tryGrab(p);
+      } else if (p.mode === 'ui') this.updatePull(p, dt, now);
+    }
+    V.gripP = gp;
+  },
+  updatePull(p, dt, now) {
+    const pl = p.pull; if (!pl) return;
+    const it = pl.it, el = it.el;
+    if (it.dead || it.pulled || !itemShown(it)) { this.cancelPull(p); return; }
+    pl.t += dt; const need = G.pullMs / 1000;
+    if (!pl.ready) {
+      if (pl.t > 0.08) {                                           // light trembling: the element resists
+        const a = 0.4 + 1.3 * clamp(pl.t / need, 0, 1);
+        el.classList.add('pull-a'); el.style.transform = 'translate(' + (Math.sin(now * 70) * a).toFixed(2) + 'px,' + (Math.cos(now * 83) * a * 0.6).toFixed(2) + 'px) rotate(' + (Math.sin(now * 61) * a * 0.4).toFixed(2) + 'deg)';
+      }
+      if (pl.t >= need) {
+        pl.ready = true; el.classList.remove('pull-a'); el.classList.add('pull-b');         // outline and a stronger shake: ready to pull
+        Snd.play('ready'); const r = rectOf(it); Fx.ring(r.cx, r.cy, '#ffb703', Math.max(r.w, r.h) * 0.7);
+        try { if (navigator.vibrate) navigator.vibrate(15); } catch (err) { /* ignore */ }
+      }
+      return;
+    }
+    const dx = p.x - pl.ox, dy = p.y - pl.oy, dd = hyp(dx, dy), br = 54 * sizeK(), k = clamp(dd / br, 0, 1.1), a = 1.5 + 1.8 * k, ang = Math.atan2(dy, dx);
+    const tx = clamp(dx * 0.45, -30, 30), ty = clamp(dy * 0.45, -30, 30);     // the element is dragged out of line and stretches before it tears loose
+    el.style.transform = 'translate(' + (tx + Math.sin(now * 90) * a).toFixed(2) + 'px,' + (ty + Math.cos(now * 77) * a).toFixed(2) + 'px) rotate(' + ang.toFixed(3) + 'rad) scale(' + (1 + 0.22 * k).toFixed(3) + ',' + (1 - 0.12 * k).toFixed(3) + ') rotate(' + (-ang).toFixed(3) + 'rad)';
+    if (dd >= br) {
+      pl.det = true; el.classList.remove('pull-b');
+      p.body = pullOut(it, p); p.mode = 'body'; p.pull = null; this.noClickUntil = performance.now() + 600;
+    }
+  },
+};
+
+/* ================= Game State Manager ================= */
+const Game = {
+  rafLast: 0,
+  start() {
+    Snd.init(); resetWorld(); G.phase = 'play';
+    $$('.ov').forEach((o) => o.classList.remove('show'));
+    V.spawnT = 0.01; Virus.place(A.w * 0.5, A.h * 0.38);
+    AI.setState('explore'); this.rafLast = 0;
+  },
+  pause() { if (G.phase !== 'play') return; G.phase = 'pause'; Input.cancelAll(); $('#ovPause').classList.add('show'); },
+  resume() { if (G.phase !== 'pause') return; G.phase = 'play'; $('#ovPause').classList.remove('show'); this.rafLast = 0; },
+  restart() { $$('.ov').forEach((o) => o.classList.remove('show')); this.start(); },
+  win() {
+    if (G.phase !== 'play') return;
+    G.phase = 'win'; Input.cancelAll(); Snd.play('win'); profSave();
+    $('#winKv').innerHTML = this.kv();
+    $('#ovWin').classList.add('show');
+  },
+  lose() {
+    if (G.phase !== 'play') return;
+    G.phase = 'lose'; Input.cancelAll(); Snd.play('lose'); V.happy = 3; V.wantTaunt = false; profSave();
+    $('#loseKv').innerHTML = this.kv(); $('#ovLose').classList.add('show');
+  },
+  kv() {
+    const s = G.stats, t = Math.round(G.play), row = (a, b) => '<span>' + a + '</span><b>' + b + '</b>';
+    return row('Time played', Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0')) + row('Score', G.score) + row('Virus level reached', V.lvl + ' · ' + Evo.name(V.lvl)) + row('Taps landed', s.hits + ' / ' + s.taps) +
+      row('UI pieces eaten', s.eaten) + row('Letters swallowed', s.swallowed) + row('Dodges', s.dodges) + row('Tab jumps', s.migr) + row('UI ripped out', P.pullN);
+  },
+};
+function resetWorld() {
+  TL.length = 0; Input.reset(); Phys.clear(); Fx.clear(); UIFx.clear(); Glitch.reset(); AI.reset(); Combat.reset();
+  $('#toasts').textContent = '';
+  buildThreads(); buildList();
+  UI.items.forEach((it) => { if (it.kind !== 'text') restoreItem(it); });
+  $$('.navb').forEach((b) => b.classList.remove('sq'));
+  $('#combo').classList.remove('show');
+  ['in-dm', 'in-team'].forEach((id) => { $('#' + id).value = ''; });
+  Object.assign(G.stats, { eaten: 0, swallowed: 0, dodges: 0, hits: 0, taps: 0, misses: 0, migr: 0 });
+  G.play = 0; G.score = 0; G.hitStop = 0; G.diff = 0.15; G.shake = 0; G.chaos = 0; G.integ = 1; G.lastHitT = -99;
+  UI.unread = { list: 3, dm: 0, team: 0, settings: 0 };
+  setTab('dm'); shell.style.transform = '';
+  Virus.reset(); Evo.reset(); V.tabSince = G.clock;
+  refreshBadges(); refreshStatics(); updateHud(0, true);
+}
+
+/* ================= main loop ================= */
+let statT = 0, intT = 0, saveT = 0;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!Game.rafLast) Game.rafLast = ts;
+  let dt = (ts - Game.rafLast) / 1000; Game.rafLast = ts;
+  if (dt > 0.25 || dt < 0) dt = 1 / 60;               // coming back from a sleeping tab: no giant step
+  dt = Math.min(dt, 0.05);
+  Perf.sample(dt * 1000); G.frame++;
+  const run = G.phase !== 'pause';
+  const stop = G.hitStop > 0; if (stop) G.hitStop -= dt;      // hit stop: the simulation freezes for a few frames after a heavy impact
+  const sdt = stop ? 0 : dt;
+  if (run) {
+    if (G.phase === 'play') Input.update(dt);
+    if (sdt > 0) {
+      G.clock += sdt; tickTL();
+      if (G.phase === 'play') { G.play += sdt; AI.update(sdt); }
+      else if (G.phase === 'menu' || G.phase === 'win') {
+        if (G.phase === 'menu') { steer(A.w * 0.5 + Math.cos(G.clock * 0.7) * A.w * 0.25, A.h * 0.4 + Math.sin(G.clock * 1.1) * 50, 90, 300, sdt); Virus.integrate(sdt); V.look.x = damp(V.look.x, Math.cos(G.clock), 4, sdt); V.look.y = damp(V.look.y, Math.sin(G.clock * 1.3), 4, sdt); }
+      } else if (G.phase === 'lose') { V.vx *= 0.95; V.vy *= 0.95; Virus.integrate(sdt); V.state = 'taunt'; }
+      if (!V.hidden && V.tab === G.tab && !V.dead) Virus.update(sdt);
+      else if (V.dying > 0) Virus.update(sdt);
+      Phys.acc = (Phys.acc || 0) + sdt;
+      while (Phys.acc >= 1 / 60) { Phys.step(1 / 60); Phys.acc -= 1 / 60; }
+      if (V.alive && !V.hidden && V.tab === G.tab && V.dying <= 0 && V.sc > 0.5) { Phys.pushFromCircles(Virus.colliders()); if (G.phase === 'play') Combat.update(sdt); }
+      if (G.phase === 'play') {
+        Glitch.ambient(sdt); updateRegrow(sdt);
+        statT -= sdt; if (statT <= 0) { statT = 0.3; if (G.shake < 0.3) refreshStatics(); }
+        intT -= sdt; if (intT <= 0) { intT = 0.5; computeIntegrity(); if (G.integ < 0.2 && G.play > 25 && V.alive) Game.lose(); }
+        saveT -= sdt; if (saveT <= 0) { saveT = 10; profSave(); }
+        if (G.tab === 'settings') { intT = Math.min(intT, 0.5); }
+      }
+    }
+    Fx.update(stop ? dt * 0.15 : dt); UIFx.update(dt);
+  }
+  G.shake *= Math.exp(-9 * dt);
+  if (G.shake > 0.2) shell.style.transform = 'translate(' + rnd(-G.shake, G.shake).toFixed(1) + 'px,' + rnd(-G.shake, G.shake).toFixed(1) + 'px)';
+  else if (shell.style.transform) shell.style.transform = '';
+  xF.clearRect(0, 0, A.w, A.h); xB.clearRect(0, 0, A.w, A.h);
+  Virus.draw(); Fx.draw(xF);
+  updateHud(dt);
+  if (G.tab === 'settings' && (G.frame % 30 === 0)) renderProfile();
+}
+
+/* ================= boot ================= */
+function bindUi() {
+  $$('.navb').forEach((b) => b.addEventListener('click', () => { if (G.phase === 'play') setTab(b.dataset.tab); }));
+  $$('[data-send]').forEach((b) => b.addEventListener('click', () => { if (G.phase === 'play') sendMsg(b.dataset.send); }));
+  ['dm', 'team'].forEach((t) => $('#in-' + t).addEventListener('keydown', (e) => { if (e.key === 'Enter' && G.phase === 'play') sendMsg(t); }));
+  $('#bPause').addEventListener('click', () => Game.pause());
+  $('#bSound').addEventListener('click', () => { G.sound = !G.sound; Snd.init(); setSave(); refreshSettingsUi(); });
+  $('#btSound').addEventListener('click', () => { G.sound = !G.sound; Snd.init(); setSave(); refreshSettingsUi(); });
+  const step = (k, d, lo, hi) => { G[k] = clamp(G[k] + d, lo, hi); setSave(); refreshSettingsUi(); };
+  $('#btHoldM').addEventListener('click', () => step('holdMs', -25, 200, 450)); $('#btHoldP').addEventListener('click', () => step('holdMs', 25, 200, 450));
+  $('#btPullM').addEventListener('click', () => step('pullMs', -50, 300, 700)); $('#btPullP').addEventListener('click', () => step('pullMs', 50, 300, 700));
+  $('#bFx').addEventListener('click', () => {
+    if (G.qAuto) { G.qAuto = false; G.qLevel = 2; } else if (G.qLevel > 0) G.qLevel--; else { G.qAuto = true; G.qLevel = Math.min(G.qLevel, 2); }
+    applyQuality(); toast('Effects', G.qAuto ? 'Auto (adapts to your device)' : QL[G.qLevel].name);
+  });
+  $$('#qSeg .btn').forEach((b) => b.addEventListener('click', () => { if (b.dataset.q === 'auto') G.qAuto = true; else { G.qAuto = false; G.qLevel = +b.dataset.q; } applyQuality(); }));
+  $('#btForget').addEventListener('click', () => { profClear(); renderProfile(); toast('Virus', 'It forgot everything it learned about you'); });
+  $('#btRestart').addEventListener('click', () => Game.restart());
+  $('#btRestart2').addEventListener('click', () => Game.restart());
+  $('#btStart').addEventListener('click', () => Game.start());
+  $('#btResume').addEventListener('click', () => Game.resume());
+  $('#btAgain').addEventListener('click', () => Game.restart());
+  $('#btAgain2').addEventListener('click', () => Game.restart());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { if (G.phase === 'play') Game.pause(); profSave(); } else Game.rafLast = 0; });
+  window.addEventListener('pagehide', profSave);
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (G.phase === 'play') Game.pause(); else if (G.phase === 'pause') Game.resume(); } });
+  if (window.ResizeObserver) new ResizeObserver(() => measureApp()).observe(appEl);
+  window.addEventListener('resize', measureApp); window.addEventListener('orientationchange', () => later(0.2, measureApp));
+}
+function boot() {
+  document.documentElement.lang = 'en-US';
+  profLoad(); setLoad();
+  const lowMem = navigator.deviceMemory && navigator.deviceMemory <= 2;
+  G.qLevel = lowMem ? 0 : G.reduced || (navigator.hardwareConcurrency || 4) <= 4 ? 1 : 2;
+  measureApp();
+  registerStatic(); buildThreads(); buildList();
+  Input.init(); bindUi();
+  applyQuality(); sizeCanvases();
+  setTab('dm');
+  Virus.reset(); Evo.reset(); V.tabSince = 0; AI.setState('idle');
+  refreshBadges(); refreshStatics(); refreshSettingsUi(); renderProfile(); updateHud(0, true);
+  if (P.games > 0) { const kv = $('#startKv'); kv.hidden = false; kv.innerHTML = '<span>The virus remembers you</span><b>' + P.games + ' games</b><span>Moves it has learned</span><b>' + P.samples + '</b><span>Highest level seen</span><b>' + (P.maxLvl || 1) + '</b>'; }
+  booted = true;
+  requestAnimationFrame(frame);
+  window.__virus = { Virus, G, V, P, UI, Phys, AI, Game, Input, Fx, Combat, Evo, Learn, UIFx, setTab, biteItem, shatter, regrow, pullOut };      // handle for debugging in the console
+}
+boot();
+})();
+</script>
+
+</body></html>
